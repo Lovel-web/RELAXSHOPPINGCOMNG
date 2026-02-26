@@ -1,9 +1,9 @@
 import { db } from "./db";
 import {
-  states, lgas, estates, users, products, orders, orderItems,
-  type State, type Lga, type Estate, type User, type Product, type Order
+  states, lgas, estates, users, products, orders, orderItems, vendorPayments,
+  type State, type Lga, type Estate, type User, type Product, type Order, type VendorPayment
 } from "@shared/schema";
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 
 export interface IStorage {
   getStates(): Promise<State[]>;
@@ -12,7 +12,9 @@ export interface IStorage {
   getProducts(lgaId?: number): Promise<Product[]>;
   createProduct(product: Omit<Product, "id">): Promise<Product>;
   createUser(user: Omit<User, "id">): Promise<User>;
-  getOrders(): Promise<Order[]>;
+  getUserByPhone(phone: string): Promise<User | undefined>;
+  updateUser(id: number, user: Partial<User>): Promise<User>;
+  getOrders(lgaId?: number): Promise<Order[]>;
   createOrder(order: Omit<Order, "id" | "createdAt">): Promise<Order>;
   updateOrderStatus(id: number, status: string): Promise<Order>;
 }
@@ -41,7 +43,18 @@ export class DatabaseStorage implements IStorage {
     const [newUser] = await db.insert(users).values(user).returning();
     return newUser;
   }
-  async getOrders(): Promise<Order[]> {
+  async getUserByPhone(phone: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.phone, phone));
+    return user;
+  }
+  async updateUser(id: number, user: Partial<User>): Promise<User> {
+    const [updated] = await db.update(users).set(user).where(eq(users.id, id)).returning();
+    return updated;
+  }
+  async getOrders(lgaId?: number): Promise<Order[]> {
+    if (lgaId) {
+      return await db.select().from(orders).where(eq(orders.lgaId, lgaId));
+    }
     return await db.select().from(orders);
   }
   async createOrder(order: Omit<Order, "id" | "createdAt">): Promise<Order> {
