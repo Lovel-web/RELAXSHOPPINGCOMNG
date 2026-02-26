@@ -29,18 +29,22 @@ async function seedDatabase() {
       vendorId: vendor.id,
       name: "Rice 5kg",
       price: 5000,
+      vendorCost: 4500,
       stock: 20,
       imageUrl: "https://images.unsplash.com/photo-1586201375761-83865001e31c?auto=format&fit=crop&w=300",
-      lgaId: lga.id
+      lgaId: lga.id,
+      category: "Grains"
     });
     
     await db.insert(products).values({
       vendorId: vendor.id,
       name: "Beans 2kg",
       price: 3000,
+      vendorCost: 2700,
       stock: 15,
       imageUrl: "https://images.unsplash.com/photo-1551024601-bec78aea704b?auto=format&fit=crop&w=300",
-      lgaId: lga.id
+      lgaId: lga.id,
+      category: "Legumes"
     });
   }
 }
@@ -111,21 +115,28 @@ export async function registerRoutes(
       });
 
       // Generate order code
-      const randomStr = Math.random().toString(36).substring(2, 7).toUpperCase();
-      const orderCode = `EST-${randomStr}`; // We could lookup estate abbreviation if needed
+      const randomStr = Math.floor(10000 + Math.random() * 90000).toString();
+      const allEstates = await storage.getEstates(input.customer.lgaId || 0);
+      const estate = allEstates.find(e => e.id === input.estateId);
+      const abbreviation = estate?.abbreviation || "ORD";
+      const orderCode = `${abbreviation}-${randomStr}`;
 
-      // Calc total (mocked logic for now, in real app compute from DB product prices)
-      const totalAmount = 5000 + 400; 
+      // Calc total
+      const totalAmount = input.items.reduce((acc: number, item: any) => acc + (item.price * item.quantity), 0) + 400; 
 
       const order = await storage.createOrder({
         orderCode,
         customerId: user.id,
         estateId: input.estateId,
+        lgaId: input.customer.lgaId || 0,
+        stateId: input.customer.stateId || 0,
         staffId: null,
         totalAmount,
         deliveryFee: 400,
         status: 'pending_payment',
+        vendorPaid: false,
         paymentReference: null,
+        batchTime: '10AM',
       });
 
       res.status(201).json(order);
