@@ -1,4 +1,4 @@
-import { Switch, Route, Redirect } from "wouter";
+import { Switch, Route } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -12,12 +12,7 @@ import VendorDashboard from "@/pages/VendorDashboard";
 import StaffDashboard from "@/pages/StaffDashboard";
 import AdminDashboard from "@/pages/AdminDashboard";
 
-// Temporary role check until auth is fully implemented
-const useUser = () => ({ data: { role: 'customer', approved: true } });
-
 function Router() {
-  const { data: user } = useUser();
-
   return (
     <Switch>
       <Route path="/" component={Home} />
@@ -25,25 +20,17 @@ function Router() {
       <Route path="/cart" component={Cart} />
       <Route path="/checkout" component={Checkout} />
       <Route path="/success" component={Success} />
-      
-      <Route path="/vendor-dashboard">
-        {() => user?.role === 'vendor' && user?.approved ? <VendorDashboard /> : <Redirect to="/" />}
-      </Route>
-      
-      <Route path="/staff-dashboard">
-        {() => user?.role === 'staff' && user?.approved ? <StaffDashboard /> : <Redirect to="/" />}
-      </Route>
-      
-      <Route path="/admin-dashboard">
-        {() => user?.role === 'admin' ? <AdminDashboard /> : <Redirect to="/" />}
-      </Route>
-
+      <Route path="/vendor-dashboard" component={VendorDashboard} />
+      <Route path="/staff-dashboard" component={StaffDashboard} />
+      <Route path="/admin-dashboard" component={AdminDashboard} />
       <Route path="/pending-approval">
         <div className="flex items-center justify-center min-h-screen">
-          <h1 className="text-2xl font-bold">Your account is pending approval</h1>
+          <div className="text-center p-8">
+            <h1 className="text-2xl font-bold mb-2">Account Pending Approval</h1>
+            <p className="text-muted-foreground">An admin will review and approve your account shortly.</p>
+          </div>
         </div>
       </Route>
-
       <Route component={NotFound} />
     </Switch>
   );
