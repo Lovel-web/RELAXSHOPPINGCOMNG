@@ -1,4 +1,4 @@
-import { pgTable, text, serial, integer, boolean, timestamp, decimal } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, integer, boolean, timestamp } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -36,8 +36,8 @@ export const products = pgTable("products", {
   id: serial("id").primaryKey(),
   vendorId: integer("vendor_id").notNull(),
   name: text("name").notNull(),
-  price: integer("price").notNull(), // Selling price to customer
-  vendorCost: integer("vendor_cost").notNull().default(0), // Price paid to vendor
+  price: integer("price").notNull(),
+  vendorCost: integer("vendor_cost").notNull().default(0),
   stock: integer("stock").notNull().default(0),
   imageUrl: text("image_url"),
   lgaId: integer("lga_id").notNull(),
@@ -54,10 +54,10 @@ export const orders = pgTable("orders", {
   staffId: integer("staff_id"),
   totalAmount: integer("total_amount").notNull(),
   deliveryFee: integer("delivery_fee").notNull().default(400),
-  status: text("status").notNull().default('pending_payment'), // 'pending_payment', 'paid', 'ready_for_delivery', 'delivered'
+  status: text("status").notNull().default('pending_payment'),
   vendorPaid: boolean("vendor_paid").default(false),
   paymentReference: text("payment_reference"),
-  batchTime: text("batch_time"), // '10AM', '1PM', '4PM'
+  batchTime: text("batch_time"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -80,12 +80,10 @@ export const vendorPayments = pgTable("vendor_payments", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-// Zod schemas
 export const insertUserSchema = createInsertSchema(users).omit({ id: true });
 export const insertProductSchema = createInsertSchema(products).omit({ id: true });
 export const insertOrderSchema = createInsertSchema(orders).omit({ id: true, createdAt: true });
 
-// Types
 export type State = typeof states.$inferSelect;
 export type Lga = typeof lgas.$inferSelect;
 export type Estate = typeof estates.$inferSelect;
