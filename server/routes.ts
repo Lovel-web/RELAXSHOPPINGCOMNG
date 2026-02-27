@@ -161,5 +161,43 @@ export async function registerRoutes(
     }
   });
 
+  app.post(api.vendorPayout.path, async (req, res) => {
+    try {
+      const input = api.vendorPayout.input.parse(req.body);
+      const results = [];
+
+      for (const orderId of input.orderIds) {
+        const updated = await storage.markOrderVendorPaid(orderId);
+        results.push(updated);
+      }
+
+      const transferRef = `TRF-${Date.now()}-${Math.random().toString(36).substring(2, 7).toUpperCase()}`;
+
+      res.json({
+        success: true,
+        transferReference: transferRef,
+        ordersProcessed: results.length,
+        orders: results,
+      });
+    } catch (err) {
+      res.status(400).json({ message: "Payout failed" });
+    }
+  });
+
+  app.get('/api/users', async (req, res) => {
+    const role = req.query.role as string | undefined;
+    const allUsers = await storage.getUsers(role);
+    res.json(allUsers);
+  });
+
+  app.patch('/api/users/:id/approve', async (req, res) => {
+    try {
+      const updated = await storage.updateUser(Number(req.params.id), { approved: true });
+      res.json(updated);
+    } catch (err) {
+      res.status(400).json({ message: "Failed to approve user" });
+    }
+  });
+
   return httpServer;
 }

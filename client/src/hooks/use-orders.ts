@@ -20,7 +20,7 @@ export function useOrders(staffId?: string) {
 export interface CreateOrderData {
   customer: InsertUser;
   estateId: number;
-  items: Array<{ productId: number; quantity: number }>;
+  items: Array<{ productId: number; quantity: number; price?: number }>;
 }
 
 export function useCreateOrder() {

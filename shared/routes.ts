@@ -38,6 +38,7 @@ export const api = {
         items: z.array(z.object({
           productId: z.number(),
           quantity: z.number(),
+          price: z.number().optional(),
         }))
       }),
       responses: { 201: z.any(), 400: errorSchemas.validation },
@@ -65,6 +66,15 @@ export const api = {
       path: '/api/lgas/:lgaId/estates' as const,
       responses: { 200: z.array(z.any()) }
     }
+  },
+  vendorPayout: {
+    method: 'POST' as const,
+    path: '/api/vendor-payout' as const,
+    input: z.object({
+      orderIds: z.array(z.number()),
+      staffId: z.number(),
+    }),
+    responses: { 200: z.any(), 400: errorSchemas.validation },
   },
   auth: {
     signup: {

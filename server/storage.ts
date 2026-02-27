@@ -13,10 +13,12 @@ export interface IStorage {
   createProduct(product: Omit<Product, "id">): Promise<Product>;
   createUser(user: Omit<User, "id">): Promise<User>;
   getUserByPhone(phone: string): Promise<User | undefined>;
+  getUsers(role?: string): Promise<User[]>;
   updateUser(id: number, user: Partial<User>): Promise<User>;
   getOrders(lgaId?: number): Promise<Order[]>;
   createOrder(order: Omit<Order, "id" | "createdAt">): Promise<Order>;
   updateOrderStatus(id: number, status: string): Promise<Order>;
+  markOrderVendorPaid(id: number): Promise<Order>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -47,6 +49,12 @@ export class DatabaseStorage implements IStorage {
     const [user] = await db.select().from(users).where(eq(users.phone, phone));
     return user;
   }
+  async getUsers(role?: string): Promise<User[]> {
+    if (role) {
+      return await db.select().from(users).where(eq(users.role, role));
+    }
+    return await db.select().from(users);
+  }
   async updateUser(id: number, user: Partial<User>): Promise<User> {
     const [updated] = await db.update(users).set(user).where(eq(users.id, id)).returning();
     return updated;
@@ -64,6 +72,13 @@ export class DatabaseStorage implements IStorage {
   async updateOrderStatus(id: number, status: string): Promise<Order> {
     const [updated] = await db.update(orders)
       .set({ status })
+      .where(eq(orders.id, id))
+      .returning();
+    return updated;
+  }
+  async markOrderVendorPaid(id: number): Promise<Order> {
+    const [updated] = await db.update(orders)
+      .set({ vendorPaid: true, status: 'ready_for_delivery' })
       .where(eq(orders.id, id))
       .returning();
     return updated;
