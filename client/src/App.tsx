@@ -15,6 +15,8 @@ import PendingApproval from "@/pages/PendingApproval";
 import VendorDashboard from "@/pages/VendorDashboard";
 import StaffDashboard from "@/pages/StaffDashboard";
 import AdminDashboard from "@/pages/AdminDashboard";
+import PaymentCallback from "@/pages/PaymentCallback";
+import Receipt from "@/pages/Receipt";
 
 function Router() {
   return (
@@ -24,6 +26,8 @@ function Router() {
       <Route path="/cart" component={Cart} />
       <Route path="/checkout" component={Checkout} />
       <Route path="/success" component={Success} />
+      <Route path="/payment/callback" component={PaymentCallback} />
+      <Route path="/receipt/:id" component={Receipt} />
       <Route path="/login" component={Auth} />
       <Route path="/pending-approval" component={PendingApproval} />
       <Route path="/vendor-dashboard">

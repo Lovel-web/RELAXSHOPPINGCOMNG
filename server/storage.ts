@@ -1,9 +1,9 @@
 import { db } from "./db";
 import {
   states, lgas, estates, users, products, orders, orderItems, vendorPayments,
-  type State, type Lga, type Estate, type User, type Product, type Order, type VendorPayment
+  type State, type Lga, type Estate, type User, type Product, type Order, type OrderItem, type VendorPayment
 } from "@shared/schema";
-import { eq, and } from "drizzle-orm";
+import { eq, and, inArray } from "drizzle-orm";
 
 export interface IStorage {
   getStates(): Promise<State[]>;
@@ -12,14 +12,22 @@ export interface IStorage {
   getProducts(lgaId?: number): Promise<Product[]>;
   createProduct(product: Omit<Product, "id">): Promise<Product>;
   createUser(user: Omit<User, "id">): Promise<User>;
+  getUserById(id: number): Promise<User | undefined>;
   getUserByPhone(phone: string): Promise<User | undefined>;
   getUserBySupabaseId(supabaseId: string): Promise<User | undefined>;
   getUsers(role?: string): Promise<User[]>;
   updateUser(id: number, user: Partial<User>): Promise<User>;
   getOrders(lgaId?: number): Promise<Order[]>;
+  getOrder(id: number): Promise<Order | undefined>;
   createOrder(order: Omit<Order, "id" | "createdAt">): Promise<Order>;
+  updateOrder(id: number, data: Partial<Order>): Promise<Order>;
   updateOrderStatus(id: number, status: string): Promise<Order>;
   markOrderVendorPaid(id: number): Promise<Order>;
+  createOrderItems(items: Omit<OrderItem, "id">[]): Promise<OrderItem[]>;
+  getOrderItems(orderId: number): Promise<OrderItem[]>;
+  getOrderItemsForOrders(orderIds: number[]): Promise<(OrderItem & { product: Product })[]>;
+  createVendorPayment(payment: Omit<VendorPayment, "id" | "createdAt">): Promise<VendorPayment>;
+  getVendorPayment(id: number): Promise<VendorPayment | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -45,6 +53,10 @@ export class DatabaseStorage implements IStorage {
   async createUser(user: Omit<User, "id">): Promise<User> {
     const [newUser] = await db.insert(users).values(user).returning();
     return newUser;
+  }
+  async getUserById(id: number): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.id, id));
+    return user;
   }
   async getUserByPhone(phone: string): Promise<User | undefined> {
     const [user] = await db.select().from(users).where(eq(users.phone, phone));
@@ -87,6 +99,42 @@ export class DatabaseStorage implements IStorage {
       .where(eq(orders.id, id))
       .returning();
     return updated;
+  }
+  async getOrder(id: number): Promise<Order | undefined> {
+    const [order] = await db.select().from(orders).where(eq(orders.id, id));
+    return order;
+  }
+  async updateOrder(id: number, data: Partial<Order>): Promise<Order> {
+    const [updated] = await db.update(orders).set(data).where(eq(orders.id, id)).returning();
+    return updated;
+  }
+  async createOrderItems(items: Omit<OrderItem, "id">[]): Promise<OrderItem[]> {
+    if (items.length === 0) return [];
+    return await db.insert(orderItems).values(items).returning();
+  }
+  async getOrderItems(orderId: number): Promise<OrderItem[]> {
+    return await db.select().from(orderItems).where(eq(orderItems.orderId, orderId));
+  }
+  async getOrderItemsForOrders(orderIds: number[]): Promise<(OrderItem & { product: Product })[]> {
+    if (orderIds.length === 0) return [];
+    const items = await db.select().from(orderItems).where(inArray(orderItems.orderId, orderIds));
+    const productIds = [...new Set(items.map(i => i.productId))];
+    const productList = productIds.length > 0
+      ? await db.select().from(products).where(inArray(products.id, productIds))
+      : [];
+    const productMap = new Map(productList.map(p => [p.id, p]));
+    return items.map(item => ({
+      ...item,
+      product: productMap.get(item.productId)!,
+    }));
+  }
+  async createVendorPayment(payment: Omit<VendorPayment, "id" | "createdAt">): Promise<VendorPayment> {
+    const [vp] = await db.insert(vendorPayments).values(payment).returning();
+    return vp;
+  }
+  async getVendorPayment(id: number): Promise<VendorPayment | undefined> {
+    const [vp] = await db.select().from(vendorPayments).where(eq(vendorPayments.id, id));
+    return vp;
   }
 }
 

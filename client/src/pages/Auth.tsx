@@ -234,14 +234,15 @@ export default function Auth() {
                 {role === "vendor" && (
                   <>
                     <div className="space-y-2">
-                      <Label htmlFor="bankName">Bank Name (optional)</Label>
+                      <Label htmlFor="bankName">Bank Code (optional)</Label>
                       <Input
                         id="bankName"
                         data-testid="input-bank-name"
-                        placeholder="e.g. GTBank"
+                        placeholder="e.g. 058 (GTBank), 033 (UBA)"
                         value={bankName}
                         onChange={(e) => setBankName(e.target.value)}
                       />
+                      <p className="text-xs text-muted-foreground">Paystack bank code for settlement</p>
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="accountNumber">Account Number (optional)</Label>
