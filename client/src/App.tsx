@@ -3,11 +3,15 @@ import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { AuthProvider } from "@/hooks/use-auth";
+import { ProtectedRoute } from "@/components/ProtectedRoute";
 import NotFound from "@/pages/not-found";
 import Home from "@/pages/Home";
 import Cart from "@/pages/Cart";
 import Checkout from "@/pages/Checkout";
 import Success from "@/pages/Success";
+import Auth from "@/pages/Auth";
+import PendingApproval from "@/pages/PendingApproval";
 import VendorDashboard from "@/pages/VendorDashboard";
 import StaffDashboard from "@/pages/StaffDashboard";
 import AdminDashboard from "@/pages/AdminDashboard";
@@ -20,16 +24,22 @@ function Router() {
       <Route path="/cart" component={Cart} />
       <Route path="/checkout" component={Checkout} />
       <Route path="/success" component={Success} />
-      <Route path="/vendor-dashboard" component={VendorDashboard} />
-      <Route path="/staff-dashboard" component={StaffDashboard} />
-      <Route path="/admin-dashboard" component={AdminDashboard} />
-      <Route path="/pending-approval">
-        <div className="flex items-center justify-center min-h-screen">
-          <div className="text-center p-8">
-            <h1 className="text-2xl font-bold mb-2">Account Pending Approval</h1>
-            <p className="text-muted-foreground">An admin will review and approve your account shortly.</p>
-          </div>
-        </div>
+      <Route path="/login" component={Auth} />
+      <Route path="/pending-approval" component={PendingApproval} />
+      <Route path="/vendor-dashboard">
+        <ProtectedRoute allowedRoles={["vendor"]}>
+          <VendorDashboard />
+        </ProtectedRoute>
+      </Route>
+      <Route path="/staff-dashboard">
+        <ProtectedRoute allowedRoles={["staff"]}>
+          <StaffDashboard />
+        </ProtectedRoute>
+      </Route>
+      <Route path="/admin-dashboard">
+        <ProtectedRoute allowedRoles={["admin"]}>
+          <AdminDashboard />
+        </ProtectedRoute>
       </Route>
       <Route component={NotFound} />
     </Switch>
@@ -39,10 +49,12 @@ function Router() {
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
-        <Toaster />
-        <Router />
-      </TooltipProvider>
+      <AuthProvider>
+        <TooltipProvider>
+          <Toaster />
+          <Router />
+        </TooltipProvider>
+      </AuthProvider>
     </QueryClientProvider>
   );
 }

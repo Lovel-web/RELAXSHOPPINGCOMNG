@@ -4,21 +4,43 @@ import { useProducts } from "@/hooks/use-products";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useState } from "react";
-import { Users, Package, ShoppingCart, DollarSign, CheckCircle, Clock, XCircle } from "lucide-react";
-import { type Order, type Product } from "@shared/schema";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
+import { Users, Package, ShoppingCart, DollarSign, CheckCircle, Clock, XCircle, UserCheck, Loader2 } from "lucide-react";
+import { type Order, type Product, type User } from "@shared/schema";
 
 export default function AdminDashboard() {
   const { data: orders } = useOrders();
   const { data: products } = useProducts();
-  const [tab, setTab] = useState<"overview" | "orders" | "products">("overview");
+  const { data: allUsers } = useQuery<User[]>({ queryKey: ["/api/users"] });
+  const [tab, setTab] = useState<"overview" | "orders" | "products" | "users">("overview");
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
 
   const allOrders = (orders as Order[]) || [];
   const allProducts = (products as Product[]) || [];
+  const usersList = allUsers || [];
+
+  const pendingUsers = usersList.filter((u) => !u.approved && (u.role === "vendor" || u.role === "staff"));
 
   const paidOrders = allOrders.filter((o) => o.status === "paid" || o.status === "ready_for_delivery" || o.status === "delivered");
   const totalRevenue = paidOrders.reduce((acc, o) => acc + o.totalAmount, 0);
-  const pendingOrders = allOrders.filter((o) => o.status === "pending_payment");
   const deliveredOrders = allOrders.filter((o) => o.status === "delivered");
+
+  const approveUser = useMutation({
+    mutationFn: async (userId: number) => {
+      const res = await apiRequest("PATCH", `/api/users/${userId}/approve`);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/users"] });
+      toast({ title: "User approved", description: "The user can now access their dashboard." });
+    },
+    onError: () => {
+      toast({ title: "Failed", description: "Could not approve user", variant: "destructive" });
+    },
+  });
 
   const stats = [
     { label: "Total Orders", value: allOrders.length, icon: ShoppingCart, color: "text-blue-600 bg-blue-50" },
@@ -34,7 +56,7 @@ export default function AdminDashboard() {
       <main className="container max-w-5xl mx-auto px-4 py-8">
         <h1 className="text-2xl font-bold mb-6" data-testid="text-admin-title">Admin Dashboard</h1>
 
-        <div className="flex gap-2 mb-6">
+        <div className="flex gap-2 mb-6 flex-wrap">
           <Button variant={tab === "overview" ? "default" : "outline"} onClick={() => setTab("overview")} data-testid="button-tab-overview">
             Overview
           </Button>
@@ -43,6 +65,14 @@ export default function AdminDashboard() {
           </Button>
           <Button variant={tab === "products" ? "default" : "outline"} onClick={() => setTab("products")} data-testid="button-tab-products">
             All Products
+          </Button>
+          <Button variant={tab === "users" ? "default" : "outline"} onClick={() => setTab("users")} data-testid="button-tab-users" className="relative">
+            <Users className="w-4 h-4 mr-2" /> Users
+            {pendingUsers.length > 0 && (
+              <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-xs rounded-full flex items-center justify-center font-bold">
+                {pendingUsers.length}
+              </span>
+            )}
           </Button>
         </div>
 
@@ -139,6 +169,58 @@ export default function AdminDashboard() {
               {allProducts.length === 0 && (
                 <p className="text-muted-foreground text-center py-8">No products yet</p>
               )}
+            </div>
+          </div>
+        )}
+
+        {tab === "users" && (
+          <div className="space-y-6">
+            {pendingUsers.length > 0 && (
+              <div className="bg-white rounded-xl border border-border/50 p-6">
+                <h2 className="font-semibold text-lg mb-4 flex items-center gap-2">
+                  <Clock className="w-5 h-5 text-yellow-600" />
+                  Pending Approval ({pendingUsers.length})
+                </h2>
+                <div className="space-y-3">
+                  {pendingUsers.map((u) => (
+                    <div key={u.id} className="flex items-center justify-between py-3 border-b last:border-0" data-testid={`row-pending-user-${u.id}`}>
+                      <div>
+                        <span className="font-semibold">{u.name}</span>
+                        <p className="text-sm text-muted-foreground">{u.email || u.phone} &middot; {u.role}</p>
+                      </div>
+                      <Button
+                        size="sm"
+                        onClick={() => approveUser.mutate(u.id)}
+                        disabled={approveUser.isPending}
+                        data-testid={`button-approve-${u.id}`}
+                      >
+                        {approveUser.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserCheck className="w-4 h-4 mr-1" />}
+                        Approve
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="bg-white rounded-xl border border-border/50 p-6">
+              <h2 className="font-semibold text-lg mb-4">All Users ({usersList.length})</h2>
+              <div className="space-y-3">
+                {usersList.map((u) => (
+                  <div key={u.id} className="flex items-center justify-between py-3 border-b last:border-0" data-testid={`row-user-${u.id}`}>
+                    <div>
+                      <span className="font-semibold">{u.name}</span>
+                      <p className="text-sm text-muted-foreground">{u.email || u.phone} &middot; {u.role}</p>
+                    </div>
+                    <Badge variant={u.approved ? "default" : "destructive"}>
+                      {u.approved ? "Approved" : "Pending"}
+                    </Badge>
+                  </div>
+                ))}
+                {usersList.length === 0 && (
+                  <p className="text-muted-foreground text-center py-8">No users yet</p>
+                )}
+              </div>
             </div>
           </div>
         )}

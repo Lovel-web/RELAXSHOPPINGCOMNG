@@ -1,5 +1,6 @@
 import { Navigation } from "@/components/Navigation";
 import { useCart } from "@/hooks/use-cart";
+import { useAuth } from "@/hooks/use-auth";
 import { useStates, useLgas, useEstates } from "@/hooks/use-locations";
 import { useCreateOrder } from "@/hooks/use-orders";
 import { Button } from "@/components/ui/button";
@@ -19,9 +20,10 @@ export default function Checkout() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
   const createOrder = useCreateOrder();
+  const { user } = useAuth();
 
-  const [name, setName] = useState("");
-  const [phone, setPhone] = useState("");
+  const [name, setName] = useState(user?.name || "");
+  const [phone, setPhone] = useState(user?.phone || "");
   const [stateId, setStateId] = useState<number | undefined>();
   const [lgaId, setLgaId] = useState<number | undefined>();
   const [estateId, setEstateId] = useState<number | undefined>();
@@ -219,7 +221,7 @@ export default function Checkout() {
           </Button>
 
           <p className="text-center text-xs text-muted-foreground">
-            Payment is simulated for this demo
+            Secure payment powered by Paystack
           </p>
         </div>
       </main>
