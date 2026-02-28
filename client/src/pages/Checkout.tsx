@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useState } from "react";
 import { useLocation, Link } from "wouter";
@@ -34,6 +35,8 @@ export default function Checkout() {
 
   const deliveryFee = 400;
 
+  const [paymentLoading, setPaymentLoading] = useState(false);
+
   const handlePayment = () => {
     if (!name || !phone || !stateId || !lgaId || !estateId) {
       toast({ title: "Missing fields", description: "Please fill all required fields", variant: "destructive" });
@@ -58,9 +61,26 @@ export default function Checkout() {
         })),
       },
       {
-        onSuccess: (order: any) => {
+        onSuccess: async (order: any) => {
           clearCart();
-          navigate(`/success?code=${order.orderCode}`);
+          setPaymentLoading(true);
+          try {
+            const customerEmail = user?.email || `${phone}@relaxshopping.ng`;
+            const res = await apiRequest("POST", "/api/payments/initialize", {
+              orderId: order.id,
+              email: customerEmail,
+            });
+            const data = await res.json();
+            if (data.authorizationUrl) {
+              window.location.href = data.authorizationUrl;
+            } else {
+              toast({ title: "Payment error", description: "Could not start payment. Try again.", variant: "destructive" });
+              setPaymentLoading(false);
+            }
+          } catch {
+            toast({ title: "Payment error", description: "Could not start payment. Try again.", variant: "destructive" });
+            setPaymentLoading(false);
+          }
         },
         onError: () => {
           toast({ title: "Order failed", description: "Something went wrong. Try again.", variant: "destructive" });
@@ -210,11 +230,11 @@ export default function Checkout() {
           <Button
             className="w-full h-14 text-base font-semibold"
             onClick={handlePayment}
-            disabled={createOrder.isPending}
+            disabled={createOrder.isPending || paymentLoading}
             data-testid="button-pay"
           >
-            {createOrder.isPending ? (
-              <><Loader2 className="w-5 h-5 mr-2 animate-spin" /> Processing...</>
+            {createOrder.isPending || paymentLoading ? (
+              <><Loader2 className="w-5 h-5 mr-2 animate-spin" /> {paymentLoading ? "Redirecting to Paystack..." : "Processing..."}</>
             ) : (
               <><ShieldCheck className="w-5 h-5 mr-2" /> Pay ₦{(total() + deliveryFee).toLocaleString()}</>
             )}
