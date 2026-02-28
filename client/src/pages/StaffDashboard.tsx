@@ -1,5 +1,7 @@
 import { Navigation } from "@/components/Navigation";
 import { useOrders, useUpdateOrderStatus } from "@/hooks/use-orders";
+import { useAuth } from "@/hooks/use-auth";
+import { apiRequest } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
@@ -15,6 +17,7 @@ function getBatchLabel(hour: number): string {
 }
 
 export default function StaffDashboard() {
+  const { user } = useAuth();
   const { data: orders, isLoading } = useOrders();
   const updateStatus = useUpdateOrderStatus();
   const { toast } = useToast();
@@ -22,8 +25,10 @@ export default function StaffDashboard() {
   const [showPaySummary, setShowPaySummary] = useState(false);
   const [paying, setPaying] = useState(false);
 
+  const staffLgaId = user?.lgaId;
+
   const paidOrders = (orders as Order[] || []).filter(
-    (o: Order) => o.status === "paid" && !o.vendorPaid
+    (o: Order) => o.status === "paid" && !o.vendorPaid && (!staffLgaId || o.lgaId === staffLgaId)
   );
 
   const toggleSelection = (id: number) => {
@@ -41,16 +46,10 @@ export default function StaffDashboard() {
   const handlePay = async () => {
     setPaying(true);
     try {
-      const res = await fetch("/api/vendor-payout", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          orderIds: selectedOrders.map((o: Order) => o.id),
-          staffId: 1,
-        }),
-        credentials: "include",
+      const res = await apiRequest("POST", "/api/vendor-payout", {
+        orderIds: selectedOrders.map((o: Order) => o.id),
+        staffId: user?.id || 0,
       });
-      if (!res.ok) throw new Error("Payout failed");
       const data = await res.json();
       toast({
         title: "Vendor payment complete",

@@ -1,5 +1,6 @@
 import { Navigation } from "@/components/Navigation";
 import { useProducts, useCreateProduct } from "@/hooks/use-products";
+import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -12,6 +13,7 @@ import { type Product } from "@shared/schema";
 const CATEGORIES = ["Grains", "Legumes", "Dairy", "Beverages", "Snacks", "Vegetables", "Fruits", "Meat", "Oil", "Seasoning", "Other"];
 
 export default function VendorDashboard() {
+  const { user } = useAuth();
   const { data: products, isLoading } = useProducts();
   const createProduct = useCreateProduct();
   const { toast } = useToast();
@@ -23,8 +25,8 @@ export default function VendorDashboard() {
   const [stock, setStock] = useState("");
   const [category, setCategory] = useState("");
 
-  const DEMO_VENDOR_ID = 1;
-  const DEMO_LGA_ID = 1;
+  const vendorId = user?.id || 0;
+  const lgaId = user?.lgaId || 0;
 
   const handleManualUpload = () => {
     if (!name || !price || !stock || !category) {
@@ -34,12 +36,12 @@ export default function VendorDashboard() {
 
     createProduct.mutate(
       {
-        vendorId: DEMO_VENDOR_ID,
+        vendorId,
         name,
         price: parseInt(price),
         vendorCost: Math.round(parseInt(price) * 0.9),
         stock: parseInt(stock),
-        lgaId: DEMO_LGA_ID,
+        lgaId,
         category,
         imageUrl: null,
       },
@@ -73,12 +75,12 @@ export default function VendorDashboard() {
 
         if (row.product_name && row.price && row.stock) {
           createProduct.mutate({
-            vendorId: DEMO_VENDOR_ID,
+            vendorId,
             name: row.product_name,
             price: parseInt(row.price),
             vendorCost: Math.round(parseInt(row.price) * 0.9),
             stock: parseInt(row.stock),
-            lgaId: DEMO_LGA_ID,
+            lgaId,
             category: row.category || "Other",
             imageUrl: null,
           });

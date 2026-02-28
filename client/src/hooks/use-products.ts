@@ -1,18 +1,16 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { api, buildUrl } from "@shared/routes";
-import { type InsertProduct } from "@shared/schema";
+import { apiRequest } from "@/lib/queryClient";
+import { api } from "@shared/routes";
 
 export function useProducts(lgaId?: string) {
   return useQuery({
-    queryKey: [api.products.list.path, lgaId],
+    queryKey: [api.products.list.path, lgaId].filter(Boolean),
     queryFn: async () => {
       const url = lgaId 
         ? `${api.products.list.path}?lgaId=${lgaId}`
         : api.products.list.path;
-      
       const res = await fetch(url, { credentials: "include" });
       if (!res.ok) throw new Error("Failed to fetch products");
-      // In a real app we'd validate with z.array(selectProductSchema)
       return await res.json();
     },
   });
@@ -21,14 +19,8 @@ export function useProducts(lgaId?: string) {
 export function useCreateProduct() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (data: InsertProduct) => {
-      const res = await fetch(api.products.create.path, {
-        method: api.products.create.method,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
-        credentials: "include",
-      });
-      if (!res.ok) throw new Error("Failed to create product");
+    mutationFn: async (data: any) => {
+      const res = await apiRequest("POST", api.products.create.path, data);
       return await res.json();
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: [api.products.list.path] }),

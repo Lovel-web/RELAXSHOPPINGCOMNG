@@ -22,6 +22,8 @@ export const estates = pgTable("estates", {
 
 export const users = pgTable("users", {
   id: serial("id").primaryKey(),
+  supabaseId: text("supabase_id").unique(),
+  email: text("email"),
   name: text("name").notNull(),
   phone: text("phone").notNull(),
   role: text("role").notNull(), // 'admin' | 'vendor' | 'staff' | 'customer'
