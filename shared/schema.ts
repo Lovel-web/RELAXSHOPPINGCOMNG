@@ -5,12 +5,15 @@ import { z } from "zod";
 export const states = pgTable("states", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
+  isActive: boolean("is_active").default(true),
 });
 
 export const lgas = pgTable("lgas", {
   id: serial("id").primaryKey(),
   stateId: integer("state_id").notNull(),
   name: text("name").notNull(),
+  whatsappLink: text("whatsapp_link"),
+  isActive: boolean("is_active").default(true),
 });
 
 export const estates = pgTable("estates", {
@@ -18,6 +21,7 @@ export const estates = pgTable("estates", {
   lgaId: integer("lga_id").notNull(),
   name: text("name").notNull(),
   abbreviation: text("abbreviation").notNull(),
+  isActive: boolean("is_active").default(true),
 });
 
 export const users = pgTable("users", {
@@ -26,12 +30,14 @@ export const users = pgTable("users", {
   email: text("email"),
   name: text("name").notNull(),
   phone: text("phone").notNull(),
-  role: text("role").notNull(), // 'admin' | 'vendor' | 'staff' | 'customer'
+  role: text("role").notNull(),
   stateId: integer("state_id"),
   lgaId: integer("lga_id"),
   approved: boolean("approved").default(false),
   bankName: text("bank_name"),
   accountNumber: text("account_number"),
+  paystackRecipientCode: text("paystack_recipient_code"),
+  accountNameVerified: text("account_name_verified"),
 });
 
 export const products = pgTable("products", {
@@ -60,6 +66,8 @@ export const orders = pgTable("orders", {
   vendorPaid: boolean("vendor_paid").default(false),
   paymentReference: text("payment_reference"),
   batchTime: text("batch_time"),
+  claimedByStaffId: integer("claimed_by_staff_id"),
+  claimedAt: timestamp("claimed_at"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -70,6 +78,7 @@ export const orderItems = pgTable("order_items", {
   quantity: integer("quantity").notNull(),
   priceSnapshot: integer("price_snapshot").notNull(),
   vendorCostSnapshot: integer("vendor_cost_snapshot").notNull().default(0),
+  vendorPaid: boolean("vendor_paid").default(false),
 });
 
 export const vendorPayments = pgTable("vendor_payments", {
@@ -77,14 +86,41 @@ export const vendorPayments = pgTable("vendor_payments", {
   vendorId: integer("vendor_id").notNull(),
   staffId: integer("staff_id").notNull(),
   amount: integer("amount").notNull(),
-  transferReference: text("transfer_reference").notNull(),
+  transferReference: text("transfer_reference").notNull().unique(),
   receiptUrl: text("receipt_url"),
+  itemsSnapshot: text("items_snapshot"),
   createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const checkoutSessions = pgTable("checkout_sessions", {
+  id: serial("id").primaryKey(),
+  sessionRef: text("session_ref").notNull().unique(),
+  customerId: integer("customer_id"),
+  customerName: text("customer_name").notNull(),
+  customerPhone: text("customer_phone").notNull(),
+  customerEmail: text("customer_email"),
+  estateId: integer("estate_id").notNull(),
+  lgaId: integer("lga_id").notNull(),
+  stateId: integer("state_id").notNull(),
+  items: text("items").notNull(),
+  totalAmount: integer("total_amount").notNull(),
+  deliveryFee: integer("delivery_fee").notNull().default(400),
+  status: text("status").notNull().default('pending'),
+  orderId: integer("order_id"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const settings = pgTable("settings", {
+  id: serial("id").primaryKey(),
+  key: text("key").notNull().unique(),
+  value: text("value").notNull(),
 });
 
 export const insertUserSchema = createInsertSchema(users).omit({ id: true });
 export const insertProductSchema = createInsertSchema(products).omit({ id: true });
 export const insertOrderSchema = createInsertSchema(orders).omit({ id: true, createdAt: true });
+export const insertCheckoutSessionSchema = createInsertSchema(checkoutSessions).omit({ id: true, createdAt: true });
+export const insertSettingsSchema = createInsertSchema(settings).omit({ id: true });
 
 export type State = typeof states.$inferSelect;
 export type Lga = typeof lgas.$inferSelect;
@@ -94,3 +130,5 @@ export type Product = typeof products.$inferSelect;
 export type Order = typeof orders.$inferSelect;
 export type OrderItem = typeof orderItems.$inferSelect;
 export type VendorPayment = typeof vendorPayments.$inferSelect;
+export type CheckoutSession = typeof checkoutSessions.$inferSelect;
+export type Settings = typeof settings.$inferSelect;

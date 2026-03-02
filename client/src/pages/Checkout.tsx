@@ -2,7 +2,6 @@ import { Navigation } from "@/components/Navigation";
 import { useCart } from "@/hooks/use-cart";
 import { useAuth } from "@/hooks/use-auth";
 import { useStates, useLgas, useEstates } from "@/hooks/use-locations";
-import { useCreateOrder } from "@/hooks/use-orders";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -20,11 +19,11 @@ export default function Checkout() {
   const clearCart = useCart((s) => s.clearCart);
   const [, navigate] = useLocation();
   const { toast } = useToast();
-  const createOrder = useCreateOrder();
   const { user } = useAuth();
 
   const [name, setName] = useState(user?.name || "");
   const [phone, setPhone] = useState(user?.phone || "");
+  const [email, setEmail] = useState(user?.email || "");
   const [stateId, setStateId] = useState<number | undefined>();
   const [lgaId, setLgaId] = useState<number | undefined>();
   const [estateId, setEstateId] = useState<number | undefined>();
@@ -35,58 +34,46 @@ export default function Checkout() {
 
   const deliveryFee = 400;
 
-  const [paymentLoading, setPaymentLoading] = useState(false);
+  const [loading, setLoading] = useState(false);
 
-  const handlePayment = () => {
+  const handlePayment = async () => {
     if (!name || !phone || !stateId || !lgaId || !estateId) {
       toast({ title: "Missing fields", description: "Please fill all required fields", variant: "destructive" });
       return;
     }
 
-    createOrder.mutate(
-      {
+    setLoading(true);
+    try {
+      const res = await apiRequest("POST", "/api/checkout/initialize", {
         customer: {
           name,
           phone,
-          role: "customer",
+          email: email || undefined,
           stateId,
           lgaId,
-          approved: true,
         },
         estateId,
         items: items.map((item) => ({
           productId: item.id,
           quantity: item.quantity,
-          price: item.price,
         })),
-      },
-      {
-        onSuccess: async (order: any) => {
-          clearCart();
-          setPaymentLoading(true);
-          try {
-            const customerEmail = user?.email || `${phone}@relaxshopping.ng`;
-            const res = await apiRequest("POST", "/api/payments/initialize", {
-              orderId: order.id,
-              email: customerEmail,
-            });
-            const data = await res.json();
-            if (data.authorizationUrl) {
-              window.location.href = data.authorizationUrl;
-            } else {
-              toast({ title: "Payment error", description: "Could not start payment. Try again.", variant: "destructive" });
-              setPaymentLoading(false);
-            }
-          } catch {
-            toast({ title: "Payment error", description: "Could not start payment. Try again.", variant: "destructive" });
-            setPaymentLoading(false);
-          }
-        },
-        onError: () => {
-          toast({ title: "Order failed", description: "Something went wrong. Try again.", variant: "destructive" });
-        },
+        email: email || `${phone}@relaxshopping.ng`,
+      });
+      const data = await res.json();
+      if (data.authorizationUrl) {
+        clearCart();
+        window.location.href = data.authorizationUrl;
+      } else {
+        toast({ title: "Payment error", description: "Could not start payment. Try again.", variant: "destructive" });
+        setLoading(false);
       }
-    );
+    } catch (err: any) {
+      const msg = err.message?.includes(":") ? err.message.split(": ").slice(1).join(": ") : "Could not start payment. Try again.";
+      try { const parsed = JSON.parse(msg); toast({ title: "Error", description: parsed.message || msg, variant: "destructive" }); } catch {
+        toast({ title: "Payment error", description: msg, variant: "destructive" });
+      }
+      setLoading(false);
+    }
   };
 
   if (items.length === 0) {
@@ -95,7 +82,7 @@ export default function Checkout() {
         <Navigation />
         <div className="container max-w-lg mx-auto px-4 py-20 text-center">
           <h2 className="text-xl font-semibold mb-4">Your cart is empty</h2>
-          <Link href="/">
+          <Link href="/shop">
             <Button data-testid="button-go-shop">Go Shopping</Button>
           </Link>
         </div>
@@ -140,6 +127,18 @@ export default function Checkout() {
                 placeholder="08012345678"
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="email">Email (optional)</Label>
+              <Input
+                id="email"
+                data-testid="input-email"
+                type="email"
+                placeholder="you@example.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
               />
             </div>
           </div>
@@ -230,11 +229,11 @@ export default function Checkout() {
           <Button
             className="w-full h-14 text-base font-semibold"
             onClick={handlePayment}
-            disabled={createOrder.isPending || paymentLoading}
+            disabled={loading}
             data-testid="button-pay"
           >
-            {createOrder.isPending || paymentLoading ? (
-              <><Loader2 className="w-5 h-5 mr-2 animate-spin" /> {paymentLoading ? "Redirecting to Paystack..." : "Processing..."}</>
+            {loading ? (
+              <><Loader2 className="w-5 h-5 mr-2 animate-spin" /> Redirecting to Paystack...</>
             ) : (
               <><ShieldCheck className="w-5 h-5 mr-2" /> Pay ₦{(total() + deliveryFee).toLocaleString()}</>
             )}

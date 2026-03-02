@@ -1,6 +1,6 @@
 import { Navigation } from "@/components/Navigation";
 import { Button } from "@/components/ui/button";
-import { CheckCircle, Copy, ArrowLeft } from "lucide-react";
+import { CheckCircle, Copy, ArrowLeft, MessageCircle } from "lucide-react";
 import { Link } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 
@@ -31,7 +31,7 @@ export default function Success() {
             Your order has been confirmed and will be delivered to your estate.
           </p>
 
-          <div className="bg-white rounded-xl border border-border/50 p-6 mb-8">
+          <div className="bg-white rounded-xl border border-border/50 p-6 mb-6">
             <p className="text-sm text-muted-foreground mb-2">Your Order Code</p>
             <div className="flex items-center justify-center gap-3">
               <span className="text-3xl font-bold text-primary tracking-wider" data-testid="text-order-code">
@@ -46,7 +46,19 @@ export default function Success() {
             </p>
           </div>
 
-          <Link href="/">
+          <div className="bg-primary/5 rounded-xl border border-primary/20 p-4 mb-8 text-left">
+            <div className="flex items-start gap-3">
+              <MessageCircle className="w-5 h-5 text-primary mt-0.5 flex-shrink-0" />
+              <div>
+                <p className="font-medium text-sm" data-testid="text-whatsapp-notice">Wait for delivery updates in your WhatsApp group.</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Your estate's WhatsApp group will have live updates on batch deliveries.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <Link href="/shop">
             <Button className="h-12 px-8" data-testid="button-continue-shopping">
               <ArrowLeft className="w-4 h-4 mr-2" /> Continue Shopping
             </Button>

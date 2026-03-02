@@ -17,11 +17,16 @@ import StaffDashboard from "@/pages/StaffDashboard";
 import AdminDashboard from "@/pages/AdminDashboard";
 import PaymentCallback from "@/pages/PaymentCallback";
 import Receipt from "@/pages/Receipt";
+import VendorSignup from "@/pages/VendorSignup";
+import StaffSignup from "@/pages/StaffSignup";
+import Landing from "@/pages/Landing";
+import JoinCustomer from "@/pages/JoinCustomer";
 
 function Router() {
   return (
     <Switch>
-      <Route path="/" component={Home} />
+      <Route path="/" component={Landing} />
+      <Route path="/join" component={JoinCustomer} />
       <Route path="/shop" component={Home} />
       <Route path="/cart" component={Cart} />
       <Route path="/checkout" component={Checkout} />
@@ -29,6 +34,8 @@ function Router() {
       <Route path="/payment/callback" component={PaymentCallback} />
       <Route path="/receipt/:id" component={Receipt} />
       <Route path="/login" component={Auth} />
+      <Route path="/vendor-signup" component={VendorSignup} />
+      <Route path="/staff-signup" component={StaffSignup} />
       <Route path="/pending-approval" component={PendingApproval} />
       <Route path="/vendor-dashboard">
         <ProtectedRoute allowedRoles={["vendor"]}>
