@@ -1,15 +1,17 @@
 import type { Express } from "express";
 import type { Server } from "http";
 import { storage } from "./storage";
-import { api } from "@shared/routes";
 import { z } from "zod";
 import { optionalAuth, requireAuth, requireRole } from "./auth";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
 import express from "express";
+import crypto from "crypto";
+import { pool } from "./db";
 
 const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY || "";
+const PAYSTACK_WEBHOOK_SECRET = process.env.PAYSTACK_WEBHOOK_SECRET || PAYSTACK_SECRET_KEY;
 
 const uploadDir = path.join(process.cwd(), "uploads");
 if (!fs.existsSync(uploadDir)) {
@@ -47,64 +49,232 @@ async function paystackRequest(endpoint: string, method: string, body?: any) {
   return await res.json();
 }
 
+const VALID_TRANSITIONS: Record<string, string[]> = {
+  'pending_payment': ['paid'],
+  'paid': ['accepted'],
+  'accepted': ['ready_for_delivery'],
+  'ready_for_delivery': ['delivered'],
+};
+
+function getBatchTime(): string {
+  const hour = new Date().getHours();
+  if (hour < 10) return '10AM';
+  if (hour < 13) return '1PM';
+  return '4PM';
+}
+
+function getBatchKey(): string {
+  const now = new Date();
+  const date = now.toISOString().split('T')[0];
+  return `${date}-${getBatchTime()}`;
+}
+
+async function generateUniqueOrderCode(abbreviation: string): Promise<string> {
+  for (let i = 0; i < 10; i++) {
+    const code = `${abbreviation}-${Math.floor(10000 + Math.random() * 90000)}`;
+    const existing = await storage.getOrderByCode(code);
+    if (!existing) return code;
+  }
+  return `${abbreviation}-${Date.now().toString().slice(-5)}`;
+}
+
+async function createOrderFromSession(session: any): Promise<any> {
+  const items = JSON.parse(session.items) as Array<{
+    productId: number; quantity: number; priceSnapshot: number;
+    vendorCostSnapshot: number; vendorId: number;
+  }>;
+
+  const estate = await storage.getEstate(session.estateId);
+  const abbreviation = estate?.abbreviation || "ORD";
+  const orderCode = await generateUniqueOrderCode(abbreviation);
+
+  let batchTime = getBatchTime();
+  const lockedBatchesStr = await storage.getSetting('locked_batches');
+  if (lockedBatchesStr) {
+    try {
+      const locked = JSON.parse(lockedBatchesStr) as string[];
+      const currentKey = getBatchKey();
+      if (locked.includes(currentKey)) {
+        const batches = ['10AM', '1PM', '4PM'];
+        const currentIdx = batches.indexOf(batchTime);
+        batchTime = batches[Math.min(currentIdx + 1, batches.length - 1)];
+      }
+    } catch { }
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    let customerId = session.customerId;
+    if (!customerId) {
+      const userResult = await client.query(
+        `INSERT INTO users (name, phone, role, state_id, lga_id, approved, email)
+         VALUES ($1, $2, 'customer', $3, $4, true, $5) RETURNING id`,
+        [session.customerName, session.customerPhone, session.stateId, session.lgaId, session.customerEmail]
+      );
+      customerId = userResult.rows[0].id;
+    }
+
+    const orderResult = await client.query(
+      `INSERT INTO orders (order_code, customer_id, estate_id, lga_id, state_id, total_amount, delivery_fee, status, vendor_paid, payment_reference, batch_time)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, 'paid', false, $8, $9) RETURNING *`,
+      [orderCode, customerId, session.estateId, session.lgaId, session.stateId, session.totalAmount, session.deliveryFee, session.sessionRef, batchTime]
+    );
+    const order = orderResult.rows[0];
+
+    for (const item of items) {
+      await client.query(
+        `INSERT INTO order_items (order_id, product_id, quantity, price_snapshot, vendor_cost_snapshot, vendor_paid)
+         VALUES ($1, $2, $3, $4, $5, false)`,
+        [order.id, item.productId, item.quantity, item.priceSnapshot, item.vendorCostSnapshot]
+      );
+    }
+
+    for (const item of items) {
+      const stockResult = await client.query(
+        'UPDATE products SET stock = stock - $1 WHERE id = $2 AND stock >= $1',
+        [item.quantity, item.productId]
+      );
+      if (stockResult.rowCount === 0) {
+        throw new Error(`Insufficient stock for product ${item.productId}`);
+      }
+    }
+
+    await client.query(
+      `UPDATE checkout_sessions SET status = 'completed' WHERE id = $1`,
+      [session.id]
+    );
+
+    await client.query('COMMIT');
+
+    return {
+      id: order.id,
+      orderCode: order.order_code,
+      status: order.status,
+      totalAmount: order.total_amount,
+    };
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
 async function seedDatabase() {
   const existingStates = await storage.getStates();
   if (existingStates.length === 0) {
     const { db } = await import("./db");
     const { states, lgas, estates, users, products } = await import("@shared/schema");
-    
+
     const [state] = await db.insert(states).values({ name: "Lagos" }).returning();
     const [lga] = await db.insert(lgas).values({ stateId: state.id, name: "Ikeja" }).returning();
     await db.insert(estates).values({ lgaId: lga.id, name: "Hawai Estate", abbreviation: "HAW" });
-    
-    const [vendor] = await db.insert(users).values({ 
-      name: "Vendor 1", phone: "08012345678", role: "vendor", stateId: state.id, lgaId: lga.id, approved: true 
+
+    const [vendor] = await db.insert(users).values({
+      name: "Vendor 1", phone: "08012345678", role: "vendor", stateId: state.id, lgaId: lga.id, approved: true
     }).returning();
-    
+
     await db.insert(products).values({
       vendorId: vendor.id, name: "Rice 5kg", price: 5000, vendorCost: 4500, stock: 20,
       imageUrl: "https://images.unsplash.com/photo-1586201375761-83865001e31c?auto=format&fit=crop&w=300",
       lgaId: lga.id, category: "Grains"
     });
-    
+
     await db.insert(products).values({
       vendorId: vendor.id, name: "Beans 2kg", price: 3000, vendorCost: 2700, stock: 15,
       imageUrl: "https://images.unsplash.com/photo-1551024601-bec78aea704b?auto=format&fit=crop&w=300",
       lgaId: lga.id, category: "Legumes"
     });
   }
+
+  const adminExists = (await storage.getUsers('admin')).length > 0;
+  if (!adminExists) {
+    const adminSupabaseId = process.env.ADMIN_SUPABASE_ID || null;
+    const adminEmail = process.env.ADMIN_EMAIL || null;
+    await storage.createUser({
+      name: 'Admin',
+      phone: '00000000000',
+      role: 'admin',
+      approved: true,
+      supabaseId: adminSupabaseId,
+      email: adminEmail,
+      stateId: null,
+      lgaId: null,
+      bankName: null,
+      accountNumber: null,
+      paystackRecipientCode: null,
+      accountNameVerified: null,
+    });
+    console.log('Admin user bootstrapped');
+  }
+}
+
+function startReconciler() {
+  setInterval(async () => {
+    try {
+      const staleSessions = await storage.getStaleCheckoutSessions();
+      for (const session of staleSessions) {
+        try {
+          const result = await paystackRequest(`/transaction/verify/${encodeURIComponent(session.sessionRef)}`, 'GET');
+          if (result.status && result.data?.status === 'success') {
+            const amountPaid = result.data.amount / 100;
+            if (amountPaid >= session.totalAmount) {
+              await createOrderFromSession(session);
+              console.log(`Reconciler: created order for session ${session.sessionRef}`);
+            }
+          } else if (result.data?.status === 'failed' || result.data?.status === 'abandoned') {
+            await storage.updateCheckoutSession(session.id, { status: 'expired' });
+          }
+        } catch (err) {
+          console.error(`Reconciler error for ${session.sessionRef}:`, err);
+        }
+      }
+    } catch (err) {
+      console.error('Reconciler cycle error:', err);
+    }
+  }, 5 * 60 * 1000);
 }
 
 export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
-  
-  seedDatabase().catch(console.error);
 
-  app.use("/uploads", (req, res, next) => {
+  seedDatabase().catch(console.error);
+  startReconciler();
+
+  app.use("/uploads", (_req, res, next) => {
     res.setHeader("Cache-Control", "public, max-age=31536000");
     next();
   }, express.static(uploadDir));
 
-  // === PUBLIC ROUTES (no auth required) ===
+  // === PUBLIC ROUTES ===
 
-  app.get(api.locations.states.path, async (req, res) => {
+  app.get('/api/states', async (_req, res) => {
     const allStates = await storage.getStates();
     res.json(allStates);
   });
 
-  app.get(api.locations.lgas.path, async (req, res) => {
+  app.get('/api/states/:stateId/lgas', async (req, res) => {
     const lgaList = await storage.getLgas(Number(req.params.stateId));
     res.json(lgaList);
   });
 
-  app.get(api.locations.estates.path, async (req, res) => {
+  app.get('/api/lgas/:lgaId/estates', async (req, res) => {
     const estateList = await storage.getEstates(Number(req.params.lgaId));
     res.json(estateList);
   });
 
-  app.get(api.products.list.path, async (req, res) => {
+  app.get('/api/lgas/:id', async (req, res) => {
+    const lga = await storage.getLga(Number(req.params.id));
+    if (!lga) return res.status(404).json({ message: "LGA not found" });
+    const estateList = await storage.getEstates(lga.id);
+    res.json({ ...lga, estates: estateList });
+  });
+
+  app.get('/api/products', async (req, res) => {
     const lgaId = req.query.lgaId ? Number(req.query.lgaId) : undefined;
     const prodList = await storage.getProducts(lgaId);
     res.json(prodList);
@@ -131,6 +301,33 @@ export async function registerRoutes(
 
       const approved = role === "customer";
 
+      let paystackRecipientCode: string | null = null;
+      let accountNameVerified: string | null = null;
+
+      if (role === "vendor" && bankName && accountNumber && PAYSTACK_SECRET_KEY) {
+        try {
+          const resolveResult = await paystackRequest(
+            `/bank/resolve?account_number=${accountNumber}&bank_code=${bankName}`, 'GET'
+          );
+          if (resolveResult.status && resolveResult.data?.account_name) {
+            accountNameVerified = resolveResult.data.account_name;
+
+            const recipientResult = await paystackRequest('/transferrecipient', 'POST', {
+              type: "nuban",
+              name: resolveResult.data.account_name,
+              account_number: accountNumber,
+              bank_code: bankName,
+              currency: "NGN",
+            });
+            if (recipientResult.status && recipientResult.data?.recipient_code) {
+              paystackRecipientCode = recipientResult.data.recipient_code;
+            }
+          }
+        } catch (err) {
+          console.warn("Bank verification failed during signup:", err);
+        }
+      }
+
       const newUser = await storage.createUser({
         supabaseId, email, name, phone, role,
         stateId: stateId || null,
@@ -138,6 +335,8 @@ export async function registerRoutes(
         approved,
         bankName: bankName || null,
         accountNumber: accountNumber || null,
+        paystackRecipientCode,
+        accountNameVerified,
       });
 
       res.status(201).json(newUser);
@@ -161,27 +360,38 @@ export async function registerRoutes(
     res.json({ url });
   });
 
-  // === AUTHENTICATED ROUTES ===
+  // === PRODUCTS ===
 
-  app.post(api.products.create.path, requireAuth, requireRole("vendor"), async (req, res) => {
+  app.post('/api/products', requireAuth, requireRole("vendor"), async (req, res) => {
     try {
-      const input = api.products.create.input.parse(req.body);
+      if (!req.user!.lgaId) {
+        return res.status(400).json({ message: "Your location is not configured. Contact admin." });
+      }
+      const { name, price, vendorCost, stock, category, imageUrl } = req.body;
+      if (!name || !price) {
+        return res.status(400).json({ message: "Name and price are required" });
+      }
       const product = {
-        ...input,
         vendorId: req.user!.id,
-        lgaId: req.user!.lgaId || input.lgaId,
+        name,
+        price: Number(price),
+        vendorCost: Number(vendorCost || Math.round(Number(price) * 0.9)),
+        stock: Number(stock || 0),
+        lgaId: req.user!.lgaId,
+        category: category || null,
+        imageUrl: imageUrl || null,
       };
       const newProd = await storage.createProduct(product);
       res.status(201).json(newProd);
     } catch (err) {
-      if (err instanceof z.ZodError) {
-        return res.status(400).json({ message: err.errors[0].message, field: err.errors[0].path.join('.') });
-      }
+      console.error("Product create error:", err);
       res.status(500).json({ message: "Internal server error" });
     }
   });
 
-  app.get(api.orders.list.path, requireAuth, async (req, res) => {
+  // === ORDERS ===
+
+  app.get('/api/orders', requireAuth, async (req, res) => {
     if (req.user!.role === "staff") {
       const lgaOrders = await storage.getOrders(req.user!.lgaId || undefined);
       return res.json(lgaOrders);
@@ -194,177 +404,278 @@ export async function registerRoutes(
     res.json(allOrders);
   });
 
-  app.post(api.orders.create.path, optionalAuth, async (req, res) => {
+  app.patch('/api/orders/:id/status', requireAuth, requireRole("staff", "admin"), async (req, res) => {
     try {
-      const input = api.orders.create.input.parse(req.body);
-      
-      let customerId: number;
-      if (req.user) {
-        customerId = req.user.id;
-      } else {
-        const user = await storage.createUser({
-          name: input.customer.name,
-          phone: input.customer.phone,
-          role: 'customer',
-          stateId: input.customer.stateId ?? null,
-          lgaId: input.customer.lgaId ?? null,
-          approved: true,
-          supabaseId: null,
-          email: null,
-          bankName: null,
-          accountNumber: null,
-        });
-        customerId = user.id;
+      const { status } = req.body;
+      const orderId = Number(req.params.id);
+      const order = await storage.getOrder(orderId);
+      if (!order) return res.status(404).json({ message: "Order not found" });
+
+      if (req.user!.role === "staff" && order.lgaId !== req.user!.lgaId) {
+        return res.status(403).json({ message: "This order is not in your LGA" });
       }
 
-      const randomStr = Math.floor(10000 + Math.random() * 90000).toString();
-      const allEstates = await storage.getEstates(input.customer.lgaId || 0);
-      const estate = allEstates.find(e => e.id === input.estateId);
-      const abbreviation = estate?.abbreviation || "ORD";
-      const orderCode = `${abbreviation}-${randomStr}`;
+      const allowed = VALID_TRANSITIONS[order.status];
+      if (!allowed || !allowed.includes(status)) {
+        return res.status(400).json({ message: `Cannot transition from ${order.status} to ${status}` });
+      }
 
-      const allProducts = await storage.getProducts();
-      const productMap = new Map(allProducts.map(p => [p.id, p]));
-
-      let itemsTotal = 0;
-      const orderItemsData: Array<{ productId: number; quantity: number; priceSnapshot: number; vendorCostSnapshot: number }> = [];
-      for (const item of input.items) {
-        const product = productMap.get(item.productId);
-        if (!product) {
-          return res.status(400).json({ message: `Product ${item.productId} not found` });
+      if (status === 'accepted') {
+        if (order.claimedByStaffId && order.claimedByStaffId !== req.user!.id) {
+          return res.status(400).json({ message: "This order is already claimed by another staff member" });
         }
-        const price = product.price;
-        const vendorCost = product.vendorCost;
-        itemsTotal += price * item.quantity;
-        orderItemsData.push({
-          productId: item.productId,
-          quantity: item.quantity,
-          priceSnapshot: price,
-          vendorCostSnapshot: vendorCost,
+        await storage.updateOrder(orderId, {
+          status: 'accepted',
+          claimedByStaffId: req.user!.id,
+          claimedAt: new Date(),
         });
+      } else if (status === 'delivered') {
+        if (order.claimedByStaffId !== req.user!.id && req.user!.role !== "admin") {
+          return res.status(400).json({ message: "Only the claiming staff can mark as delivered" });
+        }
+        const items = await storage.getOrderItems(orderId);
+        const allPaid = items.every(i => i.vendorPaid);
+        if (!allPaid) {
+          return res.status(400).json({ message: "Cannot deliver: not all vendors have been paid" });
+        }
+        await storage.updateOrderStatus(orderId, 'delivered');
+      } else {
+        await storage.updateOrderStatus(orderId, status);
       }
 
-      const totalAmount = itemsTotal + 400;
-
-      const order = await storage.createOrder({
-        orderCode, customerId, estateId: input.estateId,
-        lgaId: input.customer.lgaId || 0, stateId: input.customer.stateId || 0,
-        staffId: null, totalAmount, deliveryFee: 400,
-        status: 'pending_payment', vendorPaid: false,
-        paymentReference: null, batchTime: '10AM',
-      });
-
-      await storage.createOrderItems(
-        orderItemsData.map(item => ({ ...item, orderId: order.id }))
-      );
-
-      res.status(201).json(order);
-    } catch (err) {
-      if (err instanceof z.ZodError) {
-        return res.status(400).json({ message: err.errors[0].message, field: err.errors[0].path.join('.') });
-      }
-      console.error("Order create error:", err);
-      res.status(500).json({ message: "Internal error" });
-    }
-  });
-
-  app.patch(api.orders.updateStatus.path, requireAuth, requireRole("staff", "admin"), async (req, res) => {
-    try {
-      const input = api.orders.updateStatus.input.parse(req.body);
-      const updated = await storage.updateOrderStatus(Number(req.params.id), input.status);
+      const updated = await storage.getOrder(orderId);
       res.json(updated);
     } catch (err) {
+      console.error("Status update error:", err);
       res.status(400).json({ message: "Invalid request" });
     }
   });
 
-  // === PAYSTACK PAYMENT ===
-
-  app.post('/api/payments/initialize', optionalAuth, async (req, res) => {
+  app.post('/api/orders/items-bulk', requireAuth, requireRole("staff", "admin"), async (req, res) => {
     try {
-      const { orderId, email } = req.body;
-      if (!orderId) {
-        return res.status(400).json({ message: "orderId is required" });
+      const { orderIds } = req.body;
+      if (!orderIds || !Array.isArray(orderIds) || orderIds.length === 0) {
+        return res.status(400).json({ message: "orderIds required" });
       }
 
-      const order = await storage.getOrder(orderId);
-      if (!order) {
-        return res.status(404).json({ message: "Order not found" });
+      if (req.user!.role === "staff") {
+        const ordersData = await Promise.all(orderIds.map((id: number) => storage.getOrder(id)));
+        for (const o of ordersData) {
+          if (o && o.lgaId !== req.user!.lgaId) {
+            return res.status(403).json({ message: "Cannot access orders outside your LGA" });
+          }
+        }
       }
 
-      if (order.status !== 'pending_payment') {
-        return res.status(400).json({ message: "Order already paid or processed" });
+      const items = await storage.getOrderItemsForOrders(orderIds);
+      const vendorIds = [...new Set(items.map(i => i.product.vendorId))];
+      const vendors = await Promise.all(vendorIds.map(id => storage.getUserById(id)));
+      const vendorMap = new Map(vendors.filter(Boolean).map(v => [v!.id, v!]));
+
+      const enriched = items.map(item => ({
+        ...item,
+        vendorName: vendorMap.get(item.product.vendorId)?.name || "Unknown",
+      }));
+
+      res.json(enriched);
+    } catch (err) {
+      console.error("Bulk items error:", err);
+      res.status(500).json({ message: "Failed to load items" });
+    }
+  });
+
+  // === CHECKOUT & PAYMENT (WEBHOOK-OWNED) ===
+
+  app.post('/api/checkout/initialize', optionalAuth, async (req, res) => {
+    try {
+      const systemMode = await storage.getSetting('system_mode');
+      if (systemMode === 'maintenance') {
+        return res.status(503).json({ message: "System is under maintenance. Please try again later." });
+      }
+      if (systemMode === 'emergency') {
+        return res.status(503).json({ message: "System is temporarily unavailable." });
       }
 
-      const customerEmail = email || `customer-${order.customerId}@relaxshopping.ng`;
+      const { customer, estateId, items, email } = req.body;
+      if (!customer || !estateId || !items || !Array.isArray(items) || items.length === 0) {
+        return res.status(400).json({ message: "Missing required fields" });
+      }
+
+      const estate = await storage.getEstate(estateId);
+      if (!estate) return res.status(400).json({ message: "Invalid estate" });
+
+      const lga = await storage.getLga(estate.lgaId);
+      if (!lga) return res.status(400).json({ message: "Invalid LGA" });
+
+      if (customer.lgaId && customer.lgaId !== estate.lgaId) {
+        return res.status(400).json({ message: "Estate does not belong to the selected LGA" });
+      }
+      if (customer.stateId && customer.stateId !== lga.stateId) {
+        return res.status(400).json({ message: "LGA does not belong to the selected State" });
+      }
+
+      const sessionItems: Array<{
+        productId: number; quantity: number; priceSnapshot: number;
+        vendorCostSnapshot: number; vendorId: number;
+      }> = [];
+      let itemsTotal = 0;
+
+      for (const item of items) {
+        const product = await storage.getProduct(item.productId);
+        if (!product) {
+          return res.status(400).json({ message: `Product ${item.productId} not found` });
+        }
+        const activeReservations = await storage.getActiveReservations(product.id);
+        const availableStock = product.stock - activeReservations;
+        if (availableStock < item.quantity) {
+          return res.status(400).json({ message: `${product.name}: only ${Math.max(0, availableStock)} available (${activeReservations} reserved)` });
+        }
+        sessionItems.push({
+          productId: product.id,
+          quantity: item.quantity,
+          priceSnapshot: product.price,
+          vendorCostSnapshot: product.vendorCost,
+          vendorId: product.vendorId,
+        });
+        itemsTotal += product.price * item.quantity;
+      }
+
+      const deliveryFee = 400;
+      const totalAmount = itemsTotal + deliveryFee;
+
+      const abbreviation = estate.abbreviation || "ORD";
+      const sessionRef = `${abbreviation}-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+
+      const customerEmail = email || customer.email || `${customer.phone || 'guest'}@relaxshopping.ng`;
 
       const callbackUrl = `${req.protocol}://${req.get('host')}/payment/callback`;
 
-      const result = await paystackRequest('/transaction/initialize', 'POST', {
-        amount: order.totalAmount * 100,
+      const paystackResult = await paystackRequest('/transaction/initialize', 'POST', {
+        amount: totalAmount * 100,
         email: customerEmail,
-        reference: `${order.orderCode}-${Date.now()}`,
+        reference: sessionRef,
         callback_url: callbackUrl,
-        metadata: {
-          order_id: order.id,
-          order_code: order.orderCode,
-        },
+        metadata: { session_ref: sessionRef },
       });
 
-      if (!result.status) {
-        return res.status(400).json({ message: result.message || "Failed to initialize payment" });
+      if (!paystackResult.status) {
+        return res.status(400).json({ message: paystackResult.message || "Failed to initialize payment" });
       }
 
+      await storage.createCheckoutSession({
+        sessionRef,
+        customerId: req.user?.id || null,
+        customerName: customer.name || "Guest",
+        customerPhone: customer.phone || "",
+        customerEmail,
+        estateId,
+        lgaId: estate.lgaId,
+        stateId: lga.stateId,
+        items: JSON.stringify(sessionItems),
+        totalAmount,
+        deliveryFee,
+        status: 'pending',
+        orderId: null,
+      });
+
       res.json({
-        authorizationUrl: result.data.authorization_url,
-        reference: result.data.reference,
-        accessCode: result.data.access_code,
+        authorizationUrl: paystackResult.data.authorization_url,
+        reference: paystackResult.data.reference,
+        accessCode: paystackResult.data.access_code,
       });
     } catch (err) {
-      console.error("Payment init error:", err);
-      res.status(500).json({ message: "Failed to initialize payment" });
+      console.error("Checkout init error:", err);
+      res.status(500).json({ message: "Failed to initialize checkout" });
     }
   });
 
-  app.post('/api/payments/verify', async (req, res) => {
+  app.post('/api/payments/webhook', async (req, res) => {
     try {
-      const { reference } = req.body;
-      if (!reference) {
-        return res.status(400).json({ message: "reference is required" });
+      const rawBody = (req as any).rawBody ? (req as any).rawBody.toString('utf8') : JSON.stringify(req.body);
+      const signature = req.headers['x-paystack-signature'] as string;
+
+      if (PAYSTACK_WEBHOOK_SECRET && signature) {
+        const hash = crypto.createHmac('sha512', PAYSTACK_WEBHOOK_SECRET).update(rawBody).digest('hex');
+        if (hash !== signature) {
+          console.warn('Invalid webhook signature');
+          return res.status(401).json({ message: "Invalid signature" });
+        }
       }
 
-      const result = await paystackRequest(`/transaction/verify/${encodeURIComponent(reference)}`, 'GET');
-
-      if (!result.status || result.data.status !== 'success') {
-        return res.status(400).json({
-          message: "Payment not successful",
-          paystackStatus: result.data?.status,
-        });
+      const event = JSON.parse(rawBody);
+      if (event.event !== 'charge.success') {
+        return res.sendStatus(200);
       }
 
-      const orderId = result.data.metadata?.order_id;
-      const orderCode = result.data.metadata?.order_code;
+      const reference = event.data?.reference;
+      if (!reference) return res.sendStatus(200);
 
-      if (orderId) {
-        await storage.updateOrder(orderId, {
-          status: 'paid',
-          paymentReference: reference,
-        });
+      const session = await storage.getCheckoutSessionByRef(reference);
+      if (!session) {
+        console.warn(`Webhook: no session for ref ${reference}`);
+        return res.sendStatus(200);
       }
 
-      res.json({
-        success: true,
-        orderCode,
-        orderId,
-        amount: result.data.amount / 100,
-      });
+      if (session.status === 'completed') {
+        return res.sendStatus(200);
+      }
+
+      const amountPaid = event.data.amount / 100;
+      if (amountPaid < session.totalAmount) {
+        console.warn(`Amount mismatch: paid ${amountPaid}, expected ${session.totalAmount}`);
+        return res.sendStatus(200);
+      }
+
+      await createOrderFromSession(session);
+      res.sendStatus(200);
     } catch (err) {
-      console.error("Payment verify error:", err);
-      res.status(500).json({ message: "Failed to verify payment" });
+      console.error("Webhook error:", err);
+      res.sendStatus(200);
     }
   });
 
-  // === VENDOR PAYOUT ===
+  app.get('/api/payments/status/:reference', async (req, res) => {
+    try {
+      const reference = req.params.reference;
+      const session = await storage.getCheckoutSessionByRef(reference);
+
+      if (!session) {
+        return res.status(404).json({ message: "Session not found" });
+      }
+
+      if (session.status === 'completed' && session.orderId) {
+        const order = await storage.getOrder(session.orderId);
+        return res.json({
+          status: 'completed',
+          orderCode: order?.orderCode,
+          orderId: session.orderId,
+        });
+      }
+
+      if (session.status === 'pending') {
+        const result = await paystackRequest(`/transaction/verify/${encodeURIComponent(reference)}`, 'GET');
+        if (result.status && result.data?.status === 'success') {
+          const amountPaid = result.data.amount / 100;
+          if (amountPaid >= session.totalAmount) {
+            const order = await createOrderFromSession(session);
+            return res.json({
+              status: 'completed',
+              orderCode: order.orderCode,
+              orderId: order.id,
+            });
+          }
+        }
+        return res.json({ status: 'pending' });
+      }
+
+      return res.json({ status: session.status });
+    } catch (err) {
+      console.error("Payment status error:", err);
+      res.status(500).json({ message: "Failed to check status" });
+    }
+  });
+
+  // === VENDOR PAYOUT (ITEM-LEVEL) ===
 
   app.post('/api/vendor-payout/preview', requireAuth, requireRole("staff"), async (req, res) => {
     try {
@@ -373,11 +684,24 @@ export async function registerRoutes(
         return res.status(400).json({ message: "orderIds required" });
       }
 
-      const items = await storage.getOrderItemsForOrders(orderIds);
-      
-      const vendorTotals: Record<number, { vendorId: number; vendorName: string; bankName: string; accountNumber: string; amount: number }> = {};
+      for (const oid of orderIds) {
+        const order = await storage.getOrder(oid);
+        if (order && order.lgaId !== req.user!.lgaId) {
+          return res.status(403).json({ message: "Cannot access orders outside your LGA" });
+        }
+      }
 
-      for (const item of items) {
+      const items = await storage.getOrderItemsForOrders(orderIds);
+      const unpaidItems = items.filter(i => !i.vendorPaid);
+
+      const vendorTotals: Record<number, {
+        vendorId: number; vendorName: string; bankName: string;
+        accountNumber: string; accountNameVerified: string | null;
+        recipientCode: string | null; amount: number;
+        items: Array<{ productName: string; qty: number; unitCost: number }>;
+      }> = {};
+
+      for (const item of unpaidItems) {
         const vendorId = item.product.vendorId;
         if (!vendorTotals[vendorId]) {
           const vendor = await storage.getUserById(vendorId);
@@ -386,10 +710,18 @@ export async function registerRoutes(
             vendorName: vendor?.name || "Unknown Vendor",
             bankName: vendor?.bankName || "N/A",
             accountNumber: vendor?.accountNumber || "N/A",
+            accountNameVerified: vendor?.accountNameVerified || null,
+            recipientCode: vendor?.paystackRecipientCode || null,
             amount: 0,
+            items: [],
           };
         }
         vendorTotals[vendorId].amount += item.vendorCostSnapshot * item.quantity;
+        vendorTotals[vendorId].items.push({
+          productName: item.product.name,
+          qty: item.quantity,
+          unitCost: item.vendorCostSnapshot,
+        });
       }
 
       const breakdown = Object.values(vendorTotals);
@@ -402,95 +734,191 @@ export async function registerRoutes(
     }
   });
 
-  app.post(api.vendorPayout.path, requireAuth, requireRole("staff"), async (req, res) => {
+  app.post('/api/vendor-payout', requireAuth, requireRole("staff"), async (req, res) => {
     try {
-      const input = api.vendorPayout.input.parse(req.body);
-
-      const items = await storage.getOrderItemsForOrders(input.orderIds);
-      
-      const vendorTotals: Record<number, { vendorId: number; amount: number; bankName: string; accountNumber: string; vendorName: string }> = {};
-
-      for (const item of items) {
-        const vendorId = item.product.vendorId;
-        if (!vendorTotals[vendorId]) {
-          const vendor = await storage.getUserById(vendorId);
-          vendorTotals[vendorId] = {
-            vendorId,
-            amount: 0,
-            bankName: vendor?.bankName || "",
-            accountNumber: vendor?.accountNumber || "",
-            vendorName: vendor?.name || "Unknown",
-          };
-        }
-        vendorTotals[vendorId].amount += item.vendorCostSnapshot * item.quantity;
+      const { orderIds } = req.body;
+      if (!orderIds || !Array.isArray(orderIds) || orderIds.length === 0) {
+        return res.status(400).json({ message: "orderIds required" });
       }
 
+      const settlementEnabled = await storage.getSetting('settlement_enabled');
+      if (settlementEnabled === 'false') {
+        return res.status(400).json({ message: "Settlements are temporarily disabled by admin" });
+      }
+
+      const systemMode = await storage.getSetting('system_mode');
+      if (systemMode === 'emergency') {
+        return res.status(400).json({ message: "Settlements blocked during emergency mode" });
+      }
+
+      for (const oid of orderIds) {
+        const order = await storage.getOrder(oid);
+        if (order && order.lgaId !== req.user!.lgaId) {
+          return res.status(403).json({ message: "Cannot access orders outside your LGA" });
+        }
+      }
+
+      const client = await pool.connect();
       const paymentResults = [];
 
-      for (const vendor of Object.values(vendorTotals)) {
-        let transferRef = `TRF-${Date.now()}-${Math.random().toString(36).substring(2, 7).toUpperCase()}`;
+      try {
+        await client.query('BEGIN');
 
-        if (PAYSTACK_SECRET_KEY && vendor.bankName && vendor.accountNumber) {
-          try {
-            const recipientResult = await paystackRequest('/transferrecipient', 'POST', {
-              type: "nuban",
-              name: vendor.vendorName,
-              account_number: vendor.accountNumber,
-              bank_code: vendor.bankName,
-              currency: "NGN",
-            });
+        const itemsResult = await client.query(
+          `SELECT oi.*, p.vendor_id, p.name as product_name
+           FROM order_items oi
+           JOIN products p ON p.id = oi.product_id
+           WHERE oi.order_id = ANY($1) AND oi.vendor_paid = false
+           FOR UPDATE OF oi`,
+          [orderIds]
+        );
 
-            if (recipientResult.status && recipientResult.data?.recipient_code) {
-              const transferResult = await paystackRequest('/transfer', 'POST', {
-                source: "balance",
-                amount: vendor.amount * 100,
-                recipient: recipientResult.data.recipient_code,
-                reason: `Vendor payout for ${input.orderIds.length} orders`,
-              });
-
-              if (transferResult.status && transferResult.data?.transfer_code) {
-                transferRef = transferResult.data.transfer_code;
-              } else {
-                console.warn(`Transfer failed for vendor ${vendor.vendorId}:`, transferResult.message);
-              }
-            } else {
-              console.warn(`Transfer recipient creation failed for vendor ${vendor.vendorId}:`, recipientResult.message);
-            }
-          } catch (err) {
-            console.error(`Paystack transfer failed for vendor ${vendor.vendorId}:`, err);
-          }
-        } else if (!vendor.bankName || !vendor.accountNumber) {
-          console.warn(`Vendor ${vendor.vendorId} missing bank details, using local reference`);
+        if (itemsResult.rows.length === 0) {
+          await client.query('ROLLBACK');
+          return res.status(400).json({ message: "No unpaid items found" });
         }
 
-        const payment = await storage.createVendorPayment({
-          vendorId: vendor.vendorId,
-          staffId: req.user!.id,
-          amount: vendor.amount,
-          transferReference: transferRef,
-          receiptUrl: null,
+        const vendorGroups: Record<number, {
+          vendorId: number; amount: number;
+          itemIds: number[];
+          snapshotItems: Array<{ productName: string; qty: number; vendorCost: number }>;
+          orderIdsSet: Set<number>;
+        }> = {};
+
+        for (const row of itemsResult.rows) {
+          const vendorId = row.vendor_id;
+          if (!vendorGroups[vendorId]) {
+            vendorGroups[vendorId] = { vendorId, amount: 0, itemIds: [], snapshotItems: [], orderIdsSet: new Set() };
+          }
+          vendorGroups[vendorId].amount += row.vendor_cost_snapshot * row.quantity;
+          vendorGroups[vendorId].itemIds.push(row.id);
+          vendorGroups[vendorId].orderIdsSet.add(row.order_id);
+          vendorGroups[vendorId].snapshotItems.push({
+            productName: row.product_name,
+            qty: row.quantity,
+            vendorCost: row.vendor_cost_snapshot,
+          });
+        }
+
+        for (const group of Object.values(vendorGroups)) {
+          const vendor = await storage.getUserById(group.vendorId);
+          const transferRef = `STL-${group.vendorId}-${Date.now()}-${Math.random().toString(36).substring(2, 7).toUpperCase()}`;
+
+          const existingCheck = await client.query(
+            'SELECT id FROM vendor_payments WHERE transfer_reference = $1', [transferRef]
+          );
+          if (existingCheck.rows.length > 0) continue;
+
+          let finalRef = transferRef;
+
+          if (PAYSTACK_SECRET_KEY && vendor?.paystackRecipientCode) {
+            try {
+              const transferResult = await paystackRequest('/transfer', 'POST', {
+                source: "balance",
+                amount: group.amount * 100,
+                recipient: vendor.paystackRecipientCode,
+                reason: `Vendor payout - ${group.itemIds.length} items`,
+                reference: transferRef,
+              });
+              if (transferResult.status && transferResult.data?.transfer_code) {
+                finalRef = transferResult.data.transfer_code;
+              }
+            } catch (err) {
+              console.error(`Transfer failed for vendor ${group.vendorId}:`, err);
+            }
+          }
+
+          const itemsSnapshot = JSON.stringify(group.snapshotItems);
+
+          await client.query(
+            `INSERT INTO vendor_payments (vendor_id, staff_id, amount, transfer_reference, items_snapshot)
+             VALUES ($1, $2, $3, $4, $5)`,
+            [group.vendorId, req.user!.id, group.amount, finalRef, itemsSnapshot]
+          );
+
+          await client.query(
+            `UPDATE order_items SET vendor_paid = true WHERE id = ANY($1)`,
+            [group.itemIds]
+          );
+
+          for (const orderId of group.orderIdsSet) {
+            const unpaidCheck = await client.query(
+              `SELECT COUNT(*) FROM order_items WHERE order_id = $1 AND vendor_paid = false`,
+              [orderId]
+            );
+            if (parseInt(unpaidCheck.rows[0].count) === 0) {
+              await client.query(
+                `UPDATE orders SET status = 'ready_for_delivery' WHERE id = $1 AND status = 'accepted'`,
+                [orderId]
+              );
+            }
+          }
+
+          paymentResults.push({
+            vendorId: group.vendorId,
+            vendorName: vendor?.name || "Unknown",
+            amount: group.amount,
+            transferReference: finalRef,
+          });
+        }
+
+        await client.query('COMMIT');
+
+        res.json({
+          success: true,
+          payments: paymentResults,
+          ordersProcessed: orderIds.length,
         });
-
-        paymentResults.push({
-          ...payment,
-          vendorName: vendor.vendorName,
-          bankName: vendor.bankName,
-          accountNumber: vendor.accountNumber,
-        });
+      } catch (err) {
+        await client.query('ROLLBACK');
+        throw err;
+      } finally {
+        client.release();
       }
-
-      for (const orderId of input.orderIds) {
-        await storage.markOrderVendorPaid(orderId);
-      }
-
-      res.json({
-        success: true,
-        payments: paymentResults,
-        ordersProcessed: input.orderIds.length,
-      });
     } catch (err) {
       console.error("Payout error:", err);
       res.status(400).json({ message: "Payout failed" });
+    }
+  });
+
+  // === BATCH MANAGEMENT ===
+
+  app.post('/api/batches/lock', requireAuth, requireRole("staff"), async (req, res) => {
+    try {
+      const batchKey = getBatchKey();
+      const lockedStr = await storage.getSetting('locked_batches') || '[]';
+      const locked = JSON.parse(lockedStr) as string[];
+      if (!locked.includes(batchKey)) {
+        locked.push(batchKey);
+        await storage.setSetting('locked_batches', JSON.stringify(locked));
+      }
+      res.json({ locked: true, batchKey });
+    } catch (err) {
+      res.status(500).json({ message: "Failed to lock batch" });
+    }
+  });
+
+  app.post('/api/batches/unlock', requireAuth, requireRole("staff"), async (req, res) => {
+    try {
+      const batchKey = getBatchKey();
+      const lockedStr = await storage.getSetting('locked_batches') || '[]';
+      const locked = JSON.parse(lockedStr) as string[];
+      const filtered = locked.filter(k => k !== batchKey);
+      await storage.setSetting('locked_batches', JSON.stringify(filtered));
+      res.json({ locked: false, batchKey });
+    } catch (err) {
+      res.status(500).json({ message: "Failed to unlock batch" });
+    }
+  });
+
+  app.get('/api/batches/status', requireAuth, requireRole("staff", "admin"), async (_req, res) => {
+    try {
+      const lockedStr = await storage.getSetting('locked_batches') || '[]';
+      const locked = JSON.parse(lockedStr) as string[];
+      const currentKey = getBatchKey();
+      res.json({ locked, currentBatch: currentKey, isCurrentLocked: locked.includes(currentKey) });
+    } catch (err) {
+      res.status(500).json({ message: "Failed to get batch status" });
     }
   });
 
@@ -511,13 +939,34 @@ export async function registerRoutes(
         vendorName: vendor?.name || "Unknown",
         vendorBank: vendor?.bankName || "N/A",
         vendorAccount: vendor?.accountNumber || "N/A",
+        accountNameVerified: vendor?.accountNameVerified || null,
         staffName: staff?.name || "Unknown",
         amount: payment.amount,
         transferReference: payment.transferReference,
+        itemsSnapshot: payment.itemsSnapshot ? JSON.parse(payment.itemsSnapshot) : null,
         createdAt: payment.createdAt,
       });
     } catch (err) {
       res.status(500).json({ message: "Failed to load receipt" });
+    }
+  });
+
+  // === SETTINGS (ADMIN) ===
+
+  app.get('/api/settings/:key', requireAuth, requireRole("admin"), async (req, res) => {
+    const value = await storage.getSetting(req.params.key);
+    if (value === undefined) return res.status(404).json({ message: "Setting not found" });
+    res.json({ key: req.params.key, value });
+  });
+
+  app.patch('/api/settings/:key', requireAuth, requireRole("admin"), async (req, res) => {
+    try {
+      const { value } = req.body;
+      if (value === undefined) return res.status(400).json({ message: "value required" });
+      await storage.setSetting(req.params.key, String(value));
+      res.json({ key: req.params.key, value: String(value) });
+    } catch (err) {
+      res.status(500).json({ message: "Failed to update setting" });
     }
   });
 
@@ -535,6 +984,92 @@ export async function registerRoutes(
       res.json(updated);
     } catch (err) {
       res.status(400).json({ message: "Failed to approve user" });
+    }
+  });
+
+  app.get('/api/vendor-payments', requireAuth, requireRole("admin"), async (_req, res) => {
+    try {
+      const payments = await storage.getVendorPayments();
+      const enriched = await Promise.all(payments.map(async (p) => {
+        const vendor = await storage.getUserById(p.vendorId);
+        const staff = await storage.getUserById(p.staffId);
+        return {
+          ...p,
+          vendorName: vendor?.name || "Unknown",
+          staffName: staff?.name || "Unknown",
+          itemsSnapshot: p.itemsSnapshot ? JSON.parse(p.itemsSnapshot) : null,
+        };
+      }));
+      res.json(enriched);
+    } catch (err) {
+      res.status(500).json({ message: "Failed to load payments" });
+    }
+  });
+
+  app.post('/api/states', requireAuth, requireRole("admin"), async (req, res) => {
+    try {
+      const { name } = req.body;
+      if (!name) return res.status(400).json({ message: "Name required" });
+      const state = await storage.createState(name);
+      res.status(201).json(state);
+    } catch (err) {
+      res.status(500).json({ message: "Failed to create state" });
+    }
+  });
+
+  app.post('/api/lgas', requireAuth, requireRole("admin"), async (req, res) => {
+    try {
+      const { stateId, name, whatsappLink } = req.body;
+      if (!stateId || !name) return res.status(400).json({ message: "stateId and name required" });
+      const lga = await storage.createLga({ stateId, name, whatsappLink });
+      res.status(201).json(lga);
+    } catch (err) {
+      res.status(500).json({ message: "Failed to create LGA" });
+    }
+  });
+
+  app.post('/api/estates', requireAuth, requireRole("admin"), async (req, res) => {
+    try {
+      const { lgaId, name, abbreviation } = req.body;
+      if (!lgaId || !name || !abbreviation) return res.status(400).json({ message: "lgaId, name, and abbreviation required" });
+      const estate = await storage.createEstate({ lgaId, name, abbreviation });
+      res.status(201).json(estate);
+    } catch (err) {
+      res.status(500).json({ message: "Failed to create estate" });
+    }
+  });
+
+  app.delete('/api/states/:id', requireAuth, requireRole("admin"), async (req, res) => {
+    try {
+      await storage.deactivateState(Number(req.params.id));
+      res.json({ success: true });
+    } catch (err) {
+      res.status(500).json({ message: "Failed to deactivate state" });
+    }
+  });
+
+  app.delete('/api/lgas/:id', requireAuth, requireRole("admin"), async (req, res) => {
+    try {
+      const lgaId = Number(req.params.id);
+      if (await storage.hasActiveVendorsInLga(lgaId)) {
+        return res.status(400).json({ message: "Cannot deactivate: active vendors exist in this LGA" });
+      }
+      if (await storage.hasPendingOrdersInLga(lgaId)) {
+        return res.status(400).json({ message: "Cannot deactivate: pending orders exist in this LGA" });
+      }
+      await storage.deactivateLga(lgaId);
+      res.json({ success: true });
+    } catch (err) {
+      res.status(500).json({ message: "Failed to deactivate LGA" });
+    }
+  });
+
+  app.delete('/api/estates/:id', requireAuth, requireRole("admin"), async (req, res) => {
+    try {
+      await storage.deactivateEstate(Number(req.params.id));
+      res.json({ success: true });
+    } catch (err) {
+      res.status(500).json({ message: "Failed to deactivate estate" });
     }
   });
 

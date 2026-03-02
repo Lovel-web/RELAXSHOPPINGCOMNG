@@ -2,18 +2,38 @@ import { Navigation } from "@/components/Navigation";
 import { ProductCard } from "@/components/ProductCard";
 import { useProducts } from "@/hooks/use-products";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ShoppingBag, Search, SlidersHorizontal } from "lucide-react";
+import { ShoppingBag, Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import { useState } from "react";
+import { Badge } from "@/components/ui/badge";
+import { useState, useEffect } from "react";
+import { useLocation } from "wouter";
 import { type Product } from "@shared/schema";
 
 export default function Home() {
-  const { data: products, isLoading } = useProducts();
+  const [, navigate] = useLocation();
+  const params = new URLSearchParams(window.location.search);
+  const lgaId = params.get("lga");
+
+  useEffect(() => {
+    if (!lgaId) {
+      navigate("/join");
+    }
+  }, [lgaId, navigate]);
+
+  const { data: products, isLoading } = useProducts(lgaId || undefined);
   const [search, setSearch] = useState("");
+
+  if (!lgaId) return null;
 
   const filtered = (products as Product[] || []).filter((p: Product) =>
     p.name.toLowerCase().includes(search.toLowerCase())
   );
+
+  const getStockLabel = (stock: number) => {
+    if (stock <= 0) return { text: "Out of stock", variant: "destructive" as const };
+    if (stock <= 5) return { text: `${stock} left`, variant: "secondary" as const };
+    return { text: "In stock", variant: "outline" as const };
+  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -64,7 +84,14 @@ export default function Home() {
         ) : (
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4" data-testid="grid-products">
             {filtered.map((product: Product) => (
-              <ProductCard key={product.id} product={product} />
+              <div key={product.id} className="relative">
+                <ProductCard product={product} />
+                <div className="absolute top-2 right-2">
+                  <Badge variant={getStockLabel(product.stock).variant} className="text-xs" data-testid={`badge-stock-${product.id}`}>
+                    {getStockLabel(product.stock).text}
+                  </Badge>
+                </div>
+              </div>
             ))}
           </div>
         )}

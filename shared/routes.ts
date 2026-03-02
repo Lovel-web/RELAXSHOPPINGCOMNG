@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { insertProductSchema, insertUserSchema, insertOrderSchema } from './schema';
+import { insertProductSchema, insertUserSchema } from './schema';
 
 export const errorSchemas = {
   validation: z.object({ message: z.string(), field: z.string().optional() }),
@@ -29,20 +29,6 @@ export const api = {
       input: z.object({ staffId: z.string().optional() }).optional(),
       responses: { 200: z.array(z.any()) },
     },
-    create: {
-      method: 'POST' as const,
-      path: '/api/orders' as const,
-      input: z.object({
-        customer: insertUserSchema,
-        estateId: z.number(),
-        items: z.array(z.object({
-          productId: z.number(),
-          quantity: z.number(),
-          price: z.number().optional(),
-        }))
-      }),
-      responses: { 201: z.any(), 400: errorSchemas.validation },
-    },
     updateStatus: {
       method: 'PATCH' as const,
       path: '/api/orders/:id/status' as const,
@@ -66,15 +52,6 @@ export const api = {
       path: '/api/lgas/:lgaId/estates' as const,
       responses: { 200: z.array(z.any()) }
     }
-  },
-  vendorPayout: {
-    method: 'POST' as const,
-    path: '/api/vendor-payout' as const,
-    input: z.object({
-      orderIds: z.array(z.number()),
-      staffId: z.number(),
-    }),
-    responses: { 200: z.any(), 400: errorSchemas.validation },
   },
   auth: {
     signup: {

@@ -1,34 +1,21 @@
 import { useState } from "react";
-import { useLocation } from "wouter";
+import { useLocation, Link } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
-import { useStates, useLgas } from "@/hooks/use-locations";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, Eye, EyeOff } from "lucide-react";
-import type { State, Lga } from "@shared/schema";
 
 export default function Auth() {
-  const [mode, setMode] = useState<"login" | "signup">("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [name, setName] = useState("");
-  const [phone, setPhone] = useState("");
-  const [role, setRole] = useState("customer");
-  const [stateId, setStateId] = useState<number | undefined>();
-  const [lgaId, setLgaId] = useState<number | undefined>();
-  const [bankName, setBankName] = useState("");
-  const [accountNumber, setAccountNumber] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
-  const { signIn, signUp, user } = useAuth();
+  const { signIn, user } = useAuth();
   const [, navigate] = useLocation();
   const { toast } = useToast();
-  const { data: statesData } = useStates();
-  const { data: lgasData } = useLgas(stateId);
 
   if (user) {
     redirectByRole(user.role, navigate);
@@ -39,47 +26,11 @@ export default function Auth() {
     e.preventDefault();
     setSubmitting(true);
 
-    if (mode === "login") {
-      const result = await signIn(email, password);
-      if (result.error) {
-        toast({ title: "Login failed", description: result.error, variant: "destructive" });
-        setSubmitting(false);
-        return;
-      }
-    } else {
-      if (!name || !phone) {
-        toast({ title: "Missing fields", description: "Please fill all required fields", variant: "destructive" });
-        setSubmitting(false);
-        return;
-      }
-
-      const profile: any = { name, phone, role };
-      if (role === "vendor" || role === "staff") {
-        if (!stateId || !lgaId) {
-          toast({ title: "Missing location", description: "Vendors and staff must select their State and LGA", variant: "destructive" });
-          setSubmitting(false);
-          return;
-        }
-        profile.stateId = stateId;
-        profile.lgaId = lgaId;
-      }
-      if (role === "vendor") {
-        profile.bankName = bankName || undefined;
-        profile.accountNumber = accountNumber || undefined;
-      }
-
-      const result = await signUp(email, password, profile);
-      if (result.error) {
-        toast({ title: "Signup failed", description: result.error, variant: "destructive" });
-        setSubmitting(false);
-        return;
-      }
-
-      if (role === "vendor" || role === "staff") {
-        navigate("/pending-approval");
-        setSubmitting(false);
-        return;
-      }
+    const result = await signIn(email, password);
+    if (result.error) {
+      toast({ title: "Login failed", description: result.error, variant: "destructive" });
+      setSubmitting(false);
+      return;
     }
 
     setSubmitting(false);
@@ -93,27 +44,10 @@ export default function Auth() {
             <span className="text-white font-bold text-2xl">R</span>
           </div>
           <h1 className="text-3xl font-bold text-foreground" data-testid="text-auth-title">RelaxShopping</h1>
-          <p className="text-muted-foreground mt-1">Your local marketplace</p>
+          <p className="text-muted-foreground mt-1">Log in to your account</p>
         </div>
 
         <div className="bg-white rounded-2xl border border-border/50 p-6 shadow-sm">
-          <div className="flex mb-6 bg-secondary/50 rounded-lg p-1">
-            <button
-              className={`flex-1 py-2 text-sm font-medium rounded-md transition-colors ${mode === "login" ? "bg-white shadow-sm text-foreground" : "text-muted-foreground"}`}
-              onClick={() => setMode("login")}
-              data-testid="button-tab-login"
-            >
-              Log In
-            </button>
-            <button
-              className={`flex-1 py-2 text-sm font-medium rounded-md transition-colors ${mode === "signup" ? "bg-white shadow-sm text-foreground" : "text-muted-foreground"}`}
-              onClick={() => setMode("signup")}
-              data-testid="button-tab-signup"
-            >
-              Sign Up
-            </button>
-          </div>
-
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
@@ -135,7 +69,7 @@ export default function Auth() {
                   id="password"
                   type={showPassword ? "text" : "password"}
                   data-testid="input-password"
-                  placeholder="Min 6 characters"
+                  placeholder="Enter your password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
@@ -152,119 +86,6 @@ export default function Auth() {
               </div>
             </div>
 
-            {mode === "signup" && (
-              <>
-                <div className="space-y-2">
-                  <Label htmlFor="name">Full Name</Label>
-                  <Input
-                    id="name"
-                    data-testid="input-name"
-                    placeholder="Your full name"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    required
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="phone">Phone Number</Label>
-                  <Input
-                    id="phone"
-                    data-testid="input-phone"
-                    placeholder="08012345678"
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                    required
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label>I am a...</Label>
-                  <Select value={role} onValueChange={setRole}>
-                    <SelectTrigger data-testid="select-role">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="customer">Customer</SelectItem>
-                      <SelectItem value="vendor">Vendor</SelectItem>
-                      <SelectItem value="staff">Staff</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {(role === "vendor" || role === "staff") && (
-                  <>
-                    <div className="space-y-2">
-                      <Label>State</Label>
-                      <Select
-                        value={stateId?.toString()}
-                        onValueChange={(v) => { setStateId(Number(v)); setLgaId(undefined); }}
-                      >
-                        <SelectTrigger data-testid="select-state">
-                          <SelectValue placeholder="Select state" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {(statesData as State[] || []).map((s: State) => (
-                            <SelectItem key={s.id} value={s.id.toString()}>{s.name}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label>LGA</Label>
-                      <Select
-                        value={lgaId?.toString()}
-                        onValueChange={(v) => setLgaId(Number(v))}
-                        disabled={!stateId}
-                      >
-                        <SelectTrigger data-testid="select-lga">
-                          <SelectValue placeholder="Select LGA" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {(lgasData as Lga[] || []).map((l: Lga) => (
-                            <SelectItem key={l.id} value={l.id.toString()}>{l.name}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </>
-                )}
-
-                {role === "vendor" && (
-                  <>
-                    <div className="space-y-2">
-                      <Label htmlFor="bankName">Bank Code (optional)</Label>
-                      <Input
-                        id="bankName"
-                        data-testid="input-bank-name"
-                        placeholder="e.g. 058 (GTBank), 033 (UBA)"
-                        value={bankName}
-                        onChange={(e) => setBankName(e.target.value)}
-                      />
-                      <p className="text-xs text-muted-foreground">Paystack bank code for settlement</p>
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="accountNumber">Account Number (optional)</Label>
-                      <Input
-                        id="accountNumber"
-                        data-testid="input-account-number"
-                        placeholder="0123456789"
-                        value={accountNumber}
-                        onChange={(e) => setAccountNumber(e.target.value)}
-                      />
-                    </div>
-                  </>
-                )}
-
-                {(role === "vendor" || role === "staff") && (
-                  <p className="text-xs text-muted-foreground bg-yellow-50 rounded-lg p-3">
-                    Vendor and staff accounts require admin approval before you can access the dashboard.
-                  </p>
-                )}
-              </>
-            )}
-
             <Button
               type="submit"
               className="w-full h-12 text-base font-semibold"
@@ -273,13 +94,34 @@ export default function Auth() {
             >
               {submitting ? (
                 <><Loader2 className="w-5 h-5 mr-2 animate-spin" /> Please wait...</>
-              ) : mode === "login" ? (
-                "Log In"
               ) : (
-                "Create Account"
+                "Log In"
               )}
             </Button>
           </form>
+
+          <div className="mt-6 pt-4 border-t border-border/50 space-y-2 text-center text-sm">
+            <p className="text-muted-foreground">Don't have an account?</p>
+            <div className="flex flex-col gap-2">
+              <Link href="/join">
+                <Button variant="outline" size="sm" className="w-full" data-testid="link-join-customer">
+                  Join as Customer
+                </Button>
+              </Link>
+              <div className="flex gap-2">
+                <Link href="/vendor-signup" className="flex-1">
+                  <Button variant="ghost" size="sm" className="w-full" data-testid="link-vendor-signup">
+                    Vendor Signup
+                  </Button>
+                </Link>
+                <Link href="/staff-signup" className="flex-1">
+                  <Button variant="ghost" size="sm" className="w-full" data-testid="link-staff-signup">
+                    Staff Signup
+                  </Button>
+                </Link>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -298,7 +140,7 @@ function redirectByRole(role: string, navigate: (path: string) => void) {
       navigate("/staff-dashboard");
       break;
     default:
-      navigate("/");
+      navigate("/shop");
       break;
   }
 }
