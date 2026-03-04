@@ -192,7 +192,7 @@ async function seedDatabase() {
   const adminExists = (await storage.getUsers('admin')).length > 0;
   if (!adminExists) {
     const adminSupabaseId = process.env.ADMIN_SUPABASE_ID || null;
-    const adminEmail = process.env.ADMIN_EMAIL || null;
+    const adminEmail = process.env.ADMIN_EMAIL || 'gameunpareil@gmail.com';
     await storage.createUser({
       name: 'Admin',
       phone: '00000000000',
