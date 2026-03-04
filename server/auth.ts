@@ -58,7 +58,16 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
       return res.status(401).json({ message: "Invalid token" });
     }
 
-    const user = await storage.getUserBySupabaseId(decoded.sub);
+    let user = await storage.getUserBySupabaseId(decoded.sub);
+
+    if (!user && decoded.email) {
+      const emailUser = await storage.getUserByEmail(decoded.email);
+      if (emailUser && !emailUser.supabaseId) {
+        await storage.updateUser(emailUser.id, { supabaseId: decoded.sub });
+        user = { ...emailUser, supabaseId: decoded.sub };
+      }
+    }
+
     if (!user) {
       return res.status(401).json({ message: "User not found" });
     }
