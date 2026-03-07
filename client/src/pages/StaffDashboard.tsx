@@ -214,8 +214,15 @@ export default function StaffDashboard() {
   const generatePickupMessage = () => {
     const myOrders = claimedOrders.filter(o => o.status === "accepted");
     if (myOrders.length === 0) return "";
-    const codes = myOrders.map(o => o.orderCode).join("\n");
-    return `📦 DELIVERY UPDATE\nOrders processed:\n${codes}\n\nEstimated delivery: Today`;
+    const estateNames = new Set<string>();
+    let batchTime = "";
+    for (const o of myOrders) {
+      estateNames.add(getEstateName(o.estateId));
+      if (o.batchTime && !batchTime) batchTime = o.batchTime;
+    }
+    const lines = Array.from(estateNames).map(name => `📍 ${name}`).join("\n\n");
+    const deliveryTime = batchTime ? `Estimated delivery: ${batchTime} batch` : "Estimated delivery: Today";
+    return `📦 DELIVERY UPDATE\nOrders processed for:\n\n${lines}\n\n${deliveryTime}`;
   };
 
   const generateDeliveryMessage = () => {
@@ -338,12 +345,12 @@ export default function StaffDashboard() {
                           </div>
 
                           {oItems.length > 0 && (
-                            <div className="text-sm text-muted-foreground space-y-1 mb-3">
+                            <div className="text-sm space-y-1 mb-3">
                               {oItems.map((item, idx) => (
                                 <div key={idx} className="flex justify-between">
-                                  <span>{item.product?.name} x{item.quantity} <span className="text-xs">({item.vendorName})</span></span>
+                                  <span><strong className="text-foreground">{item.product?.name}</strong> x{item.quantity} <span className="text-xs text-muted-foreground">({item.vendorName})</span></span>
                                   <div className="flex items-center gap-1">
-                                    <span>₦{(item.priceSnapshot * item.quantity).toLocaleString()}</span>
+                                    <span className="font-semibold">₦{(item.priceSnapshot * item.quantity).toLocaleString()}</span>
                                     {item.vendorPaid && <CheckCircle className="w-3 h-3 text-green-500" />}
                                   </div>
                                 </div>
