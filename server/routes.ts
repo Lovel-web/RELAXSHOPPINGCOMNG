@@ -1124,27 +1124,46 @@ export async function registerRoutes(
       if (!targetUser) {
         return res.status(404).json({ message: "User not found" });
       }
-      if (targetUser.supabaseId) {
-        const supabaseUrl = process.env.VITE_SUPABASE_URL;
-        const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-        if (supabaseUrl && serviceRoleKey) {
-          try {
-            const { createClient } = await import("@supabase/supabase-js");
-            const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
-              auth: { autoRefreshToken: false, persistSession: false }
-            });
-            const { error: supaError } = await supabaseAdmin.auth.admin.deleteUser(targetUser.supabaseId);
-            if (supaError) {
-              console.error("Supabase Auth delete warning:", supaError.message);
-              if (!supaError.message.includes("not found") && !supaError.message.includes("User not found")) {
-                return res.status(500).json({ message: "Failed to delete user from authentication system: " + supaError.message });
+      const supabaseUrl = process.env.VITE_SUPABASE_URL;
+      const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+      if (supabaseUrl && serviceRoleKey && targetUser.email) {
+        try {
+          const { createClient } = await import("@supabase/supabase-js");
+          const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
+            auth: { autoRefreshToken: false, persistSession: false }
+          });
+          let matchingUsers: any[] = [];
+          let page = 1;
+          let hasMore = true;
+          const targetEmail = targetUser.email!.toLowerCase();
+          while (hasMore) {
+            const { data: listData } = await supabaseAdmin.auth.admin.listUsers({ page, perPage: 100 });
+            const users = listData?.users || [];
+            const found = users.filter((u: any) => u.email?.toLowerCase() === targetEmail);
+            matchingUsers.push(...found);
+            hasMore = users.length === 100;
+            page++;
+            if (page > 10) break;
+          }
+          if (matchingUsers.length > 0) {
+            for (const authUser of matchingUsers) {
+              console.log(`Deleting Supabase Auth user: ${authUser.id} (email: ${authUser.email})`);
+              const { error: delErr } = await supabaseAdmin.auth.admin.deleteUser(authUser.id);
+              if (delErr) {
+                console.error(`Failed to delete Supabase Auth user ${authUser.id}:`, delErr.message);
               }
             }
-          } catch (supaErr: any) {
-            console.error("Supabase Auth delete exception:", supaErr?.message || supaErr);
+          } else if (targetUser.supabaseId) {
+            console.log(`No Supabase Auth user found by email, trying by supabaseId: ${targetUser.supabaseId}`);
+            const { error: fallbackErr } = await supabaseAdmin.auth.admin.deleteUser(targetUser.supabaseId);
+            if (fallbackErr) {
+              console.error("Supabase Auth fallback delete warning:", fallbackErr.message);
+            }
+          } else {
+            console.log("No Supabase Auth user found for email:", targetUser.email);
           }
-        } else {
-          console.warn("SUPABASE_SERVICE_ROLE_KEY not configured, skipping Supabase Auth deletion");
+        } catch (supaErr: any) {
+          console.error("Supabase Auth delete exception:", supaErr?.message || supaErr);
         }
       }
       await storage.deleteUserPermanent(userId);
