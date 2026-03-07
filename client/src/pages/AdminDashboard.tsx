@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, getAuthHeaders } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useStates, useLgas } from "@/hooks/use-locations";
 import {
@@ -286,7 +286,8 @@ function UserDetailView({ userId, onBack }: { userId: number; onBack: () => void
   const { data: user, isLoading: userLoading } = useQuery<User>({
     queryKey: ["/api/users", userId],
     queryFn: async () => {
-      const res = await fetch(`/api/users/${userId}`, { credentials: "include" });
+      const headers = await getAuthHeaders();
+      const res = await fetch(`/api/users/${userId}`, { credentials: "include", headers });
       if (!res.ok) throw new Error("Failed to load user");
       return res.json();
     },
@@ -295,7 +296,8 @@ function UserDetailView({ userId, onBack }: { userId: number; onBack: () => void
   const { data: userOrders } = useQuery<Order[]>({
     queryKey: ["/api/users", userId, "orders"],
     queryFn: async () => {
-      const res = await fetch(`/api/users/${userId}/orders`, { credentials: "include" });
+      const headers = await getAuthHeaders();
+      const res = await fetch(`/api/users/${userId}/orders`, { credentials: "include", headers });
       if (!res.ok) throw new Error("Failed to load orders");
       return res.json();
     },
@@ -459,7 +461,8 @@ function LocationManager() {
   const { data: adminStates } = useQuery<State[]>({
     queryKey: ["/api/admin/states"],
     queryFn: async () => {
-      const res = await fetch("/api/admin/states", { credentials: "include" });
+      const headers = await getAuthHeaders();
+      const res = await fetch("/api/admin/states", { credentials: "include", headers });
       if (!res.ok) throw new Error("Failed to load states");
       const data = await res.json();
       return Array.isArray(data) ? data : [];
@@ -470,7 +473,8 @@ function LocationManager() {
     queryKey: ["/api/admin/states", selectedStateId, "lgas"],
     enabled: !!selectedStateId,
     queryFn: async () => {
-      const res = await fetch(`/api/admin/states/${selectedStateId}/lgas`, { credentials: "include" });
+      const headers = await getAuthHeaders();
+      const res = await fetch(`/api/admin/states/${selectedStateId}/lgas`, { credentials: "include", headers });
       if (!res.ok) throw new Error("Failed to load LGAs");
       const data = await res.json();
       return Array.isArray(data) ? data : [];
@@ -481,7 +485,8 @@ function LocationManager() {
     queryKey: ["/api/admin/lgas", selectedLgaId, "estates"],
     enabled: !!selectedLgaId,
     queryFn: async () => {
-      const res = await fetch(`/api/admin/lgas/${selectedLgaId}/estates`, { credentials: "include" });
+      const headers = await getAuthHeaders();
+      const res = await fetch(`/api/admin/lgas/${selectedLgaId}/estates`, { credentials: "include", headers });
       if (!res.ok) throw new Error("Failed to load estates");
       const data = await res.json();
       return Array.isArray(data) ? data : [];
@@ -492,7 +497,8 @@ function LocationManager() {
     queryKey: ["/api/states", selectedStateId, "summary"],
     enabled: !!selectedStateId && view === "lgas",
     queryFn: async () => {
-      const res = await fetch(`/api/states/${selectedStateId}/summary`, { credentials: "include" });
+      const headers = await getAuthHeaders();
+      const res = await fetch(`/api/states/${selectedStateId}/summary`, { credentials: "include", headers });
       if (!res.ok) throw new Error("Failed to load summary");
       return res.json();
     },
@@ -502,7 +508,8 @@ function LocationManager() {
     queryKey: ["/api/lgas", selectedLgaId, "summary"],
     enabled: !!selectedLgaId && view === "estates",
     queryFn: async () => {
-      const res = await fetch(`/api/lgas/${selectedLgaId}/summary`, { credentials: "include" });
+      const headers = await getAuthHeaders();
+      const res = await fetch(`/api/lgas/${selectedLgaId}/summary`, { credentials: "include", headers });
       if (!res.ok) throw new Error("Failed to load summary");
       return res.json();
     },
