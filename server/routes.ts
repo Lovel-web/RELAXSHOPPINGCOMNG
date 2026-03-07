@@ -399,6 +399,107 @@ export async function registerRoutes(
     }
   });
 
+  app.patch('/api/products/:id', requireAuth, requireRole("vendor"), async (req, res) => {
+    try {
+      const productId = Number(req.params.id);
+      const product = await storage.getProduct(productId);
+      if (!product) return res.status(404).json({ message: "Product not found" });
+      if (product.vendorId !== req.user!.id) return res.status(403).json({ message: "Not your product" });
+      const { name, price, vendorCost, stock, category, imageUrl } = req.body;
+      const updates: any = {};
+      if (name !== undefined) updates.name = name;
+      if (price !== undefined) {
+        updates.price = Number(price);
+        updates.vendorCost = vendorCost !== undefined ? Number(vendorCost) : Math.round(Number(price) * 0.9);
+      } else if (vendorCost !== undefined) {
+        updates.vendorCost = Number(vendorCost);
+      }
+      if (stock !== undefined) updates.stock = Number(stock);
+      if (category !== undefined) updates.category = category;
+      if (imageUrl !== undefined) updates.imageUrl = imageUrl;
+      const updated = await storage.updateProduct(productId, updates);
+      res.json(updated);
+    } catch (err) {
+      console.error("Product update error:", err);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.delete('/api/products/:id', requireAuth, requireRole("vendor"), async (req, res) => {
+    try {
+      const productId = Number(req.params.id);
+      const product = await storage.getProduct(productId);
+      if (!product) return res.status(404).json({ message: "Product not found" });
+      if (product.vendorId !== req.user!.id) return res.status(403).json({ message: "Not your product" });
+      const { rows } = await pool.query(
+        `SELECT COUNT(*) as cnt FROM order_items oi JOIN orders o ON o.id = oi.order_id WHERE oi.product_id = $1 AND o.status NOT IN ('delivered', 'cancelled')`,
+        [productId]
+      );
+      if (rows[0]?.cnt > 0) {
+        return res.status(400).json({ message: "Cannot delete product with active orders. Wait until all orders are delivered." });
+      }
+      await storage.deleteProduct(productId);
+      res.json({ success: true });
+    } catch (err) {
+      console.error("Product delete error:", err);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.get('/api/vendor/payments', requireAuth, requireRole("vendor"), async (req, res) => {
+    try {
+      const payments = await storage.getVendorPaymentsByVendor(req.user!.id);
+      payments.sort((a, b) => new Date(b.createdAt!).getTime() - new Date(a.createdAt!).getTime());
+      res.json(payments);
+    } catch (err) {
+      console.error("Vendor payments fetch error:", err);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.patch('/api/profile/bank', requireAuth, requireRole("vendor"), async (req, res) => {
+    try {
+      const { bankName, accountNumber } = req.body;
+      if (!bankName || !accountNumber) {
+        return res.status(400).json({ message: "Bank name and account number are required" });
+      }
+      let paystackRecipientCode: string | null = null;
+      let accountNameVerified: string | null = null;
+      if (PAYSTACK_SECRET_KEY) {
+        try {
+          const resolveResult = await paystackRequest(
+            `/bank/resolve?account_number=${accountNumber}&bank_code=${bankName}`, 'GET'
+          );
+          if (resolveResult.status && resolveResult.data?.account_name) {
+            accountNameVerified = resolveResult.data.account_name;
+            const recipientResult = await paystackRequest('/transferrecipient', 'POST', {
+              type: "nuban",
+              name: resolveResult.data.account_name,
+              account_number: accountNumber,
+              bank_code: bankName,
+              currency: "NGN",
+            });
+            if (recipientResult.status && recipientResult.data?.recipient_code) {
+              paystackRecipientCode = recipientResult.data.recipient_code;
+            }
+          }
+        } catch (err) {
+          console.warn("Bank verification failed during update:", err);
+        }
+      }
+      const updated = await storage.updateUser(req.user!.id, {
+        bankName,
+        accountNumber,
+        accountNameVerified,
+        paystackRecipientCode,
+      });
+      res.json(updated);
+    } catch (err) {
+      console.error("Bank update error:", err);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
   // === ORDERS ===
 
   app.get('/api/orders', requireAuth, async (req, res) => {
