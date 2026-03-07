@@ -1127,17 +1127,24 @@ export async function registerRoutes(
       if (targetUser.supabaseId) {
         const supabaseUrl = process.env.VITE_SUPABASE_URL;
         const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-        if (!supabaseUrl || !serviceRoleKey) {
-          return res.status(500).json({ message: "Supabase admin credentials not configured" });
-        }
-        const { createClient } = await import("@supabase/supabase-js");
-        const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
-          auth: { autoRefreshToken: false, persistSession: false }
-        });
-        const { error: supaError } = await supabaseAdmin.auth.admin.deleteUser(targetUser.supabaseId);
-        if (supaError) {
-          console.error("Supabase Auth delete failed:", supaError.message);
-          return res.status(500).json({ message: "Failed to delete user from authentication system" });
+        if (supabaseUrl && serviceRoleKey) {
+          try {
+            const { createClient } = await import("@supabase/supabase-js");
+            const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
+              auth: { autoRefreshToken: false, persistSession: false }
+            });
+            const { error: supaError } = await supabaseAdmin.auth.admin.deleteUser(targetUser.supabaseId);
+            if (supaError) {
+              console.error("Supabase Auth delete warning:", supaError.message);
+              if (!supaError.message.includes("not found") && !supaError.message.includes("User not found")) {
+                return res.status(500).json({ message: "Failed to delete user from authentication system: " + supaError.message });
+              }
+            }
+          } catch (supaErr: any) {
+            console.error("Supabase Auth delete exception:", supaErr?.message || supaErr);
+          }
+        } else {
+          console.warn("SUPABASE_SERVICE_ROLE_KEY not configured, skipping Supabase Auth deletion");
         }
       }
       await storage.deleteUserPermanent(userId);
