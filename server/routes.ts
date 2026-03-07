@@ -1105,12 +1105,25 @@ export async function registerRoutes(
     try {
       const userId = Number(req.params.id);
       if (userId === req.user!.id) {
-        return res.status(400).json({ message: "Cannot delete your own account" });
+        return res.status(400).json({ message: "Cannot deactivate your own account" });
       }
-      await storage.deleteUser(userId);
+      await storage.deactivateUser(userId);
       res.json({ success: true });
     } catch (err) {
-      res.status(500).json({ message: "Failed to delete user" });
+      res.status(500).json({ message: "Failed to deactivate user" });
+    }
+  });
+
+  app.delete('/api/users/:id/permanent', requireAuth, requireRole("admin"), async (req, res) => {
+    try {
+      const userId = Number(req.params.id);
+      if (userId === req.user!.id) {
+        return res.status(400).json({ message: "Cannot delete your own account" });
+      }
+      await storage.deleteUserPermanent(userId);
+      res.json({ success: true });
+    } catch (err) {
+      res.status(500).json({ message: "Failed to permanently delete user" });
     }
   });
 

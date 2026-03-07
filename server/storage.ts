@@ -56,7 +56,8 @@ export interface IStorage {
   getStatesAll(): Promise<State[]>;
   getLgasAll(stateId: number): Promise<Lga[]>;
   getEstatesAll(lgaId: number): Promise<Estate[]>;
-  deleteUser(id: number): Promise<void>;
+  deactivateUser(id: number): Promise<void>;
+  deleteUserPermanent(id: number): Promise<void>;
   reactivateState(id: number): Promise<void>;
   reactivateLga(id: number): Promise<void>;
   reactivateEstate(id: number): Promise<void>;
@@ -288,8 +289,11 @@ export class DatabaseStorage implements IStorage {
   async getEstatesAll(lgaId: number): Promise<Estate[]> {
     return await db.select().from(estates).where(eq(estates.lgaId, lgaId));
   }
-  async deleteUser(id: number): Promise<void> {
+  async deactivateUser(id: number): Promise<void> {
     await db.update(users).set({ approved: false, supabaseId: null }).where(eq(users.id, id));
+  }
+  async deleteUserPermanent(id: number): Promise<void> {
+    await db.delete(users).where(eq(users.id, id));
   }
   async reactivateState(id: number): Promise<void> {
     await db.update(states).set({ isActive: true }).where(eq(states.id, id));
