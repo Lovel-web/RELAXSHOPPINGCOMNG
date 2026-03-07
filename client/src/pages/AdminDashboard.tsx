@@ -287,6 +287,7 @@ function UserDetailView({ userId, onBack }: { userId: number; onBack: () => void
     queryKey: ["/api/users", userId],
     queryFn: async () => {
       const res = await fetch(`/api/users/${userId}`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to load user");
       return res.json();
     },
   });
@@ -295,6 +296,7 @@ function UserDetailView({ userId, onBack }: { userId: number; onBack: () => void
     queryKey: ["/api/users", userId, "orders"],
     queryFn: async () => {
       const res = await fetch(`/api/users/${userId}/orders`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to load orders");
       return res.json();
     },
   });
@@ -329,7 +331,7 @@ function UserDetailView({ userId, onBack }: { userId: number; onBack: () => void
 
   if (!user) return null;
 
-  const orders = userOrders || [];
+  const orders = Array.isArray(userOrders) ? userOrders : [];
 
   return (
     <div className="space-y-6">
@@ -458,7 +460,9 @@ function LocationManager() {
     queryKey: ["/api/admin/states"],
     queryFn: async () => {
       const res = await fetch("/api/admin/states", { credentials: "include" });
-      return res.json();
+      if (!res.ok) throw new Error("Failed to load states");
+      const data = await res.json();
+      return Array.isArray(data) ? data : [];
     },
   });
 
@@ -467,7 +471,9 @@ function LocationManager() {
     enabled: !!selectedStateId,
     queryFn: async () => {
       const res = await fetch(`/api/admin/states/${selectedStateId}/lgas`, { credentials: "include" });
-      return res.json();
+      if (!res.ok) throw new Error("Failed to load LGAs");
+      const data = await res.json();
+      return Array.isArray(data) ? data : [];
     },
   });
 
@@ -476,7 +482,9 @@ function LocationManager() {
     enabled: !!selectedLgaId,
     queryFn: async () => {
       const res = await fetch(`/api/admin/lgas/${selectedLgaId}/estates`, { credentials: "include" });
-      return res.json();
+      if (!res.ok) throw new Error("Failed to load estates");
+      const data = await res.json();
+      return Array.isArray(data) ? data : [];
     },
   });
 
@@ -485,6 +493,7 @@ function LocationManager() {
     enabled: !!selectedStateId && view === "lgas",
     queryFn: async () => {
       const res = await fetch(`/api/states/${selectedStateId}/summary`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to load summary");
       return res.json();
     },
   });
@@ -494,6 +503,7 @@ function LocationManager() {
     enabled: !!selectedLgaId && view === "estates",
     queryFn: async () => {
       const res = await fetch(`/api/lgas/${selectedLgaId}/summary`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to load summary");
       return res.json();
     },
   });
@@ -651,7 +661,7 @@ function LocationManager() {
               </Button>
             </div>
             <div className="space-y-2">
-              {(adminStates || []).map(s => (
+              {(Array.isArray(adminStates) ? adminStates : []).map(s => (
                 <div
                   key={s.id}
                   className="flex items-center justify-between py-3 px-3 border rounded-lg hover:bg-muted/50 cursor-pointer"
@@ -746,7 +756,7 @@ function LocationManager() {
               </Button>
             </div>
             <div className="space-y-2">
-              {(adminLgas || []).map(l => (
+              {(Array.isArray(adminLgas) ? adminLgas : []).map(l => (
                 <div
                   key={l.id}
                   className="flex items-center justify-between py-3 px-3 border rounded-lg hover:bg-muted/50 cursor-pointer"
@@ -841,7 +851,7 @@ function LocationManager() {
               </Button>
             </div>
             <div className="space-y-2">
-              {(adminEstates || []).map(e => (
+              {(Array.isArray(adminEstates) ? adminEstates : []).map(e => (
                 <div key={e.id} className="flex items-center justify-between py-3 px-3 border rounded-lg" data-testid={`row-estate-${e.id}`}>
                   <div className="flex items-center gap-2">
                     <span className="font-medium">{e.name}</span>
