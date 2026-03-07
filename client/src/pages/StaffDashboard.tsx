@@ -221,15 +221,11 @@ export default function StaffDashboard() {
   const generateDeliveryMessage = () => {
     const delivered = allOrders.filter(o => o.status === "delivered" && o.claimedByStaffId === user?.id);
     if (delivered.length === 0) return "";
-    const byEstate: Record<string, string[]> = {};
+    const estateNames = new Set<string>();
     for (const o of delivered) {
-      const eName = getEstateName(o.estateId);
-      if (!byEstate[eName]) byEstate[eName] = [];
-      byEstate[eName].push(o.orderCode);
+      estateNames.add(getEstateName(o.estateId));
     }
-    const lines = Object.entries(byEstate).map(([estate, codes]) =>
-      `📍 ${estate}\n${codes.map(c => `  ✓ ${c}`).join("\n")}`
-    ).join("\n\n");
+    const lines = Array.from(estateNames).map(name => `📍 ${name}`).join("\n\n");
     return `✅ DELIVERY COMPLETED\n\n${lines}\n\nThank you for shopping with RelaxShopping!`;
   };
 
