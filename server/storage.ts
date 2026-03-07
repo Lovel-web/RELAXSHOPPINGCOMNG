@@ -49,6 +49,17 @@ export interface IStorage {
   deactivateEstate(id: number): Promise<void>;
   hasActiveVendorsInLga(lgaId: number): Promise<boolean>;
   hasPendingOrdersInLga(lgaId: number): Promise<boolean>;
+  getOrdersByCustomerId(customerId: number): Promise<Order[]>;
+  getOrdersByStaffId(staffId: number): Promise<Order[]>;
+  getUsersByState(stateId: number): Promise<User[]>;
+  getUsersByLga(lgaId: number): Promise<User[]>;
+  getStatesAll(): Promise<State[]>;
+  getLgasAll(stateId: number): Promise<Lga[]>;
+  getEstatesAll(lgaId: number): Promise<Estate[]>;
+  deleteUser(id: number): Promise<void>;
+  reactivateState(id: number): Promise<void>;
+  reactivateLga(id: number): Promise<void>;
+  reactivateEstate(id: number): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -255,6 +266,39 @@ export class DatabaseStorage implements IStorage {
   async hasPendingOrdersInLga(lgaId: number): Promise<boolean> {
     const pending = await db.select().from(orders).where(and(eq(orders.lgaId, lgaId), sql`${orders.status} NOT IN ('delivered')`));
     return pending.length > 0;
+  }
+  async getOrdersByCustomerId(customerId: number): Promise<Order[]> {
+    return await db.select().from(orders).where(eq(orders.customerId, customerId));
+  }
+  async getOrdersByStaffId(staffId: number): Promise<Order[]> {
+    return await db.select().from(orders).where(eq(orders.claimedByStaffId, staffId));
+  }
+  async getUsersByState(stateId: number): Promise<User[]> {
+    return await db.select().from(users).where(eq(users.stateId, stateId));
+  }
+  async getUsersByLga(lgaId: number): Promise<User[]> {
+    return await db.select().from(users).where(eq(users.lgaId, lgaId));
+  }
+  async getStatesAll(): Promise<State[]> {
+    return await db.select().from(states);
+  }
+  async getLgasAll(stateId: number): Promise<Lga[]> {
+    return await db.select().from(lgas).where(eq(lgas.stateId, stateId));
+  }
+  async getEstatesAll(lgaId: number): Promise<Estate[]> {
+    return await db.select().from(estates).where(eq(estates.lgaId, lgaId));
+  }
+  async deleteUser(id: number): Promise<void> {
+    await db.update(users).set({ approved: false, supabaseId: null }).where(eq(users.id, id));
+  }
+  async reactivateState(id: number): Promise<void> {
+    await db.update(states).set({ isActive: true }).where(eq(states.id, id));
+  }
+  async reactivateLga(id: number): Promise<void> {
+    await db.update(lgas).set({ isActive: true }).where(eq(lgas.id, id));
+  }
+  async reactivateEstate(id: number): Promise<void> {
+    await db.update(estates).set({ isActive: true }).where(eq(estates.id, id));
   }
 }
 

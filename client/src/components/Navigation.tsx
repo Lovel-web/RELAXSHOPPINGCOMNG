@@ -10,6 +10,9 @@ export function Navigation() {
   const cartCount = cartItems.reduce((acc, item) => acc + item.quantity, 0);
   const { user, signOut } = useAuth();
 
+  const isAdminStaffVendor = user && (user.role === "admin" || user.role === "vendor" || user.role === "staff");
+  const showShopCart = !isAdminStaffVendor;
+
   const handleSignOut = async () => {
     await signOut();
     navigate("/login");
@@ -38,7 +41,7 @@ export function Navigation() {
   return (
     <>
       <header className="sticky top-0 z-50 w-full border-b bg-white/80 backdrop-blur-md hidden md:block">
-        <div className="container max-w-7xl mx-auto flex h-16 items-center justify-between px-4">
+        <div className="container max-w-7xl mx-auto flex h-16 items-center justify-between gap-4 px-4">
           <Link href="/">
             <div className="flex items-center gap-2 cursor-pointer">
               <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center">
@@ -48,8 +51,10 @@ export function Navigation() {
             </div>
           </Link>
 
-          <nav className="flex items-center gap-6">
-            <Link href="/"><span className="text-sm font-medium hover:text-primary cursor-pointer" data-testid="link-marketplace">Marketplace</span></Link>
+          <nav className="flex items-center gap-6 flex-wrap">
+            {showShopCart && (
+              <Link href="/"><span className="text-sm font-medium hover:text-primary cursor-pointer" data-testid="link-marketplace">Marketplace</span></Link>
+            )}
             {dashboardLink && (
               <Link href={dashboardLink.href}>
                 <span className="text-sm font-medium hover:text-primary cursor-pointer" data-testid={`link-${dashboardLink.label.toLowerCase()}`}>
@@ -59,21 +64,23 @@ export function Navigation() {
             )}
           </nav>
 
-          <div className="flex items-center gap-3">
-            <Link href="/cart">
-              <Button variant="ghost" className="relative" data-testid="button-cart-desktop">
-                <ShoppingCart className="w-5 h-5 mr-2" />
-                Cart
-                {cartCount > 0 && (
-                  <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-xs rounded-full flex items-center justify-center font-bold animate-in zoom-in">
-                    {cartCount}
-                  </span>
-                )}
-              </Button>
-            </Link>
+          <div className="flex items-center gap-3 flex-wrap">
+            {showShopCart && (
+              <Link href="/cart">
+                <Button variant="ghost" className="relative" data-testid="button-cart-desktop">
+                  <ShoppingCart className="w-5 h-5 mr-2" />
+                  Cart
+                  {cartCount > 0 && (
+                    <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-xs rounded-full flex items-center justify-center font-bold animate-in zoom-in">
+                      {cartCount}
+                    </span>
+                  )}
+                </Button>
+              </Link>
+            )}
 
             {user ? (
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <span className="text-sm text-muted-foreground hidden lg:block" data-testid="text-user-name">{user.name}</span>
                 <Button variant="ghost" size="icon" onClick={handleSignOut} data-testid="button-sign-out-desktop">
                   <LogOut className="w-5 h-5" />
@@ -90,7 +97,7 @@ export function Navigation() {
         </div>
       </header>
 
-      <header className="sticky top-0 z-50 w-full border-b bg-white/95 backdrop-blur-sm md:hidden px-4 h-14 flex items-center justify-between">
+      <header className="sticky top-0 z-50 w-full border-b bg-white/95 backdrop-blur-sm md:hidden px-4 h-14 flex items-center justify-between gap-2">
         <Link href="/">
           <div className="flex items-center gap-2">
             <div className="w-7 h-7 rounded-full bg-primary flex items-center justify-center">
@@ -100,15 +107,17 @@ export function Navigation() {
           </div>
         </Link>
         
-        <div className="flex items-center gap-2">
-          <Link href="/cart">
-            <Button size="icon" variant="ghost" className="relative" data-testid="button-cart-mobile">
-              <ShoppingCart className="w-5 h-5" />
-              {cartCount > 0 && (
-                <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white" />
-              )}
-            </Button>
-          </Link>
+        <div className="flex items-center gap-2 flex-wrap">
+          {showShopCart && (
+            <Link href="/cart">
+              <Button size="icon" variant="ghost" className="relative" data-testid="button-cart-mobile">
+                <ShoppingCart className="w-5 h-5" />
+                {cartCount > 0 && (
+                  <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white" />
+                )}
+              </Button>
+            </Link>
+          )}
 
           {user ? (
             <Button size="icon" variant="ghost" onClick={handleSignOut} data-testid="button-sign-out-mobile">
@@ -126,15 +135,40 @@ export function Navigation() {
 
       <nav className="fixed bottom-0 left-0 right-0 bg-white border-t z-50 md:hidden pb-safe">
         <div className="flex justify-around items-center h-16">
-          <NavLink href="/" icon={Home} label="Shop" />
-          <NavLink href="/cart" icon={ShoppingCart} label={`Cart (${cartCount})`} />
-          {dashboardLink ? (
-            dashboardLink.label === "Vendor" ? <NavLink href={dashboardLink.href} icon={User} label="Vendor" /> :
-            dashboardLink.label === "Staff" ? <NavLink href={dashboardLink.href} icon={Truck} label="Staff" /> :
-            dashboardLink.label === "Admin" ? <NavLink href={dashboardLink.href} icon={Settings} label="Admin" /> :
-            <NavLink href="/login" icon={LogIn} label="Login" />
+          {isAdminStaffVendor ? (
+            <>
+              {dashboardLink && (
+                dashboardLink.label === "Vendor" ? <NavLink href={dashboardLink.href} icon={User} label="Dashboard" /> :
+                dashboardLink.label === "Staff" ? <NavLink href={dashboardLink.href} icon={Truck} label="Dashboard" /> :
+                dashboardLink.label === "Admin" ? <NavLink href={dashboardLink.href} icon={Settings} label="Dashboard" /> :
+                null
+              )}
+              <div
+                onClick={handleSignOut}
+                className="flex flex-col items-center gap-1 p-2 rounded-lg transition-colors text-muted-foreground hover:text-foreground cursor-pointer"
+                data-testid="nav-logout"
+              >
+                <LogOut className="w-6 h-6" />
+                <span className="text-xs">Logout</span>
+              </div>
+            </>
           ) : (
-            <NavLink href="/login" icon={LogIn} label="Login" />
+            <>
+              <NavLink href="/" icon={Home} label="Shop" />
+              <NavLink href="/cart" icon={ShoppingCart} label={`Cart (${cartCount})`} />
+              {user ? (
+                <div
+                  onClick={handleSignOut}
+                  className="flex flex-col items-center gap-1 p-2 rounded-lg transition-colors text-muted-foreground hover:text-foreground cursor-pointer"
+                  data-testid="nav-logout"
+                >
+                  <LogOut className="w-6 h-6" />
+                  <span className="text-xs">Logout</span>
+                </div>
+              ) : (
+                <NavLink href="/login" icon={LogIn} label="Login" />
+              )}
+            </>
           )}
         </div>
       </nav>

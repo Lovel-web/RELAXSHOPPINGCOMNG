@@ -1,6 +1,6 @@
 import { useAuth } from "@/hooks/use-auth";
 import { useLocation } from "wouter";
-import { Loader2 } from "lucide-react";
+import { Loader2, PauseCircle } from "lucide-react";
 import { useEffect } from "react";
 
 interface ProtectedRouteProps {
@@ -56,6 +56,25 @@ export function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) 
   if ((user.role === "vendor" || user.role === "staff") && !user.approved) return null;
 
   if (!allowedRoles.includes(user.role)) return null;
+
+  if ((user as any).locationPaused && user.role !== "admin") {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-background">
+        <div className="max-w-md mx-auto text-center px-6 py-12">
+          <div className="w-16 h-16 rounded-full bg-yellow-100 flex items-center justify-center mx-auto mb-6">
+            <PauseCircle className="w-8 h-8 text-yellow-600" />
+          </div>
+          <h1 className="text-2xl font-bold mb-3" data-testid="text-location-paused">Your area is currently on hold</h1>
+          <p className="text-muted-foreground mb-6" data-testid="text-location-paused-desc">
+            Shopping and deliveries are temporarily paused in your location. We'll be back soon — please check again later.
+          </p>
+          <p className="text-sm text-muted-foreground">
+            If you believe this is an error, contact support via your estate's WhatsApp group.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return <>{children}</>;
 }
