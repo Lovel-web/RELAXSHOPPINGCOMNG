@@ -148,6 +148,7 @@ function UsersPanel({ pendingUsers, usersList, approveUser }: {
   const [roleFilter, setRoleFilter] = useState<string>("all");
   const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
+  const [permDeleteConfirm, setPermDeleteConfirm] = useState<{ id: number; name: string } | null>(null);
 
   const blockUser = useMutation({
     mutationFn: async (userId: number) => {
@@ -172,6 +173,20 @@ function UsersPanel({ pendingUsers, usersList, approveUser }: {
       setSelectedUserId(null);
       toast({ title: "User deactivated" });
     },
+    onError: () => toast({ title: "Failed to deactivate user", variant: "destructive" }),
+  });
+
+  const permDeleteUser = useMutation({
+    mutationFn: async (userId: number) => {
+      const res = await apiRequest("DELETE", `/api/users/${userId}/permanent`);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/users"] });
+      setPermDeleteConfirm(null);
+      setSelectedUserId(null);
+      toast({ title: "User permanently deleted" });
+    },
     onError: () => toast({ title: "Failed to delete user", variant: "destructive" }),
   });
 
@@ -183,6 +198,36 @@ function UsersPanel({ pendingUsers, usersList, approveUser }: {
 
   return (
     <div className="space-y-6">
+      {permDeleteConfirm && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl p-6 max-w-sm w-full">
+            <div className="flex items-center gap-2 mb-4 text-red-600">
+              <AlertTriangle className="w-5 h-5" />
+              <h3 className="font-bold">Permanently Delete User?</h3>
+            </div>
+            <p className="text-sm text-muted-foreground mb-2">
+              This will permanently remove <strong>{permDeleteConfirm.name}</strong> from the system.
+            </p>
+            <p className="text-sm text-red-600 mb-4">
+              This action cannot be undone. All user data will be lost.
+            </p>
+            <div className="flex gap-2 justify-end">
+              <Button variant="outline" onClick={() => setPermDeleteConfirm(null)} data-testid="button-cancel-perm-delete">
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={() => permDeleteUser.mutate(permDeleteConfirm.id)}
+                disabled={permDeleteUser.isPending}
+                data-testid="button-confirm-perm-delete"
+              >
+                {permDeleteUser.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : "Delete Forever"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {pendingUsers.length > 0 && (
         <div className="bg-white rounded-xl border border-border/50 p-6">
           <h2 className="font-semibold text-lg mb-4 flex items-center gap-2">
@@ -255,18 +300,21 @@ function UsersPanel({ pendingUsers, usersList, approveUser }: {
                     )}
                     {deleteConfirmId === u.id ? (
                       <div className="flex items-center gap-1">
-                        <Button variant="destructive" size="sm" onClick={() => deleteUser.mutate(u.id)} disabled={deleteUser.isPending} data-testid={`button-confirm-delete-${u.id}`}>
+                        <Button variant="destructive" size="sm" onClick={() => deleteUser.mutate(u.id)} disabled={deleteUser.isPending} data-testid={`button-confirm-deactivate-${u.id}`}>
                           {deleteUser.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : "Yes"}
                         </Button>
-                        <Button variant="outline" size="sm" onClick={() => setDeleteConfirmId(null)} data-testid={`button-cancel-delete-${u.id}`}>
+                        <Button variant="outline" size="sm" onClick={() => setDeleteConfirmId(null)} data-testid={`button-cancel-deactivate-${u.id}`}>
                           No
                         </Button>
                       </div>
                     ) : (
-                      <Button variant="ghost" size="sm" onClick={() => setDeleteConfirmId(u.id)} data-testid={`button-delete-${u.id}`}>
-                        <UserX className="w-4 h-4 text-red-500" />
+                      <Button variant="ghost" size="sm" onClick={() => setDeleteConfirmId(u.id)} title="Deactivate" data-testid={`button-deactivate-${u.id}`}>
+                        <UserX className="w-4 h-4 text-orange-600" />
                       </Button>
                     )}
+                    <Button variant="ghost" size="sm" onClick={() => setPermDeleteConfirm({ id: u.id, name: u.name })} title="Delete permanently" data-testid={`button-perm-delete-${u.id}`}>
+                      <Trash2 className="w-4 h-4 text-red-600" />
+                    </Button>
                   </>
                 )}
               </div>
