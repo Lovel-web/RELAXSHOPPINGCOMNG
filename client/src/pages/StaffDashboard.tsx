@@ -1,6 +1,7 @@
 import { Navigation } from "@/components/Navigation";
 import { useOrders, useUpdateOrderStatus } from "@/hooks/use-orders";
 import { useAuth } from "@/hooks/use-auth";
+import { useStates, useLgas, useEstates } from "@/hooks/use-locations";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -8,7 +9,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Package, Clock, CreditCard, Truck, Loader2, CheckCircle, Receipt, Lock, Unlock, Copy, MessageCircle, MapPin } from "lucide-react";
-import { type Order, type OrderItem, type Product } from "@shared/schema";
+import { type Order, type OrderItem, type Product, type State, type Lga, type Estate } from "@shared/schema";
 import { Link } from "wouter";
 
 type TabId = "batch" | "vendor" | "delivery" | "whatsapp";
@@ -23,6 +24,25 @@ export default function StaffDashboard() {
   const { data: orders, isLoading } = useOrders();
   const updateStatus = useUpdateOrderStatus();
   const { toast } = useToast();
+
+  const { data: statesData } = useStates();
+  const { data: lgasData } = useLgas(user?.stateId || undefined);
+  const { data: estatesData } = useEstates(user?.lgaId || undefined);
+
+  const stateName = user?.stateId && statesData
+    ? (statesData as State[]).find((s) => s.id === user.stateId)?.name || "—"
+    : "—";
+  const lgaName = user?.lgaId && lgasData
+    ? (lgasData as Lga[]).find((l) => l.id === user.lgaId)?.name || "—"
+    : "—";
+
+  const estateMap = new Map<number, string>();
+  if (estatesData) {
+    for (const e of estatesData as Estate[]) {
+      estateMap.set(e.id, e.name);
+    }
+  }
+  const getEstateName = (estateId: number) => estateMap.get(estateId) || `Estate ${estateId}`;
   const [tab, setTab] = useState<TabId>("batch");
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [showPaySummary, setShowPaySummary] = useState(false);
@@ -186,7 +206,7 @@ export default function StaffDashboard() {
 
   const estateGroups: Record<string, Order[]> = {};
   for (const o of readyOrders) {
-    const key = `Estate ${o.estateId}`;
+    const key = getEstateName(o.estateId);
     if (!estateGroups[key]) estateGroups[key] = [];
     estateGroups[key].push(o);
   }
@@ -201,8 +221,16 @@ export default function StaffDashboard() {
   const generateDeliveryMessage = () => {
     const delivered = allOrders.filter(o => o.status === "delivered" && o.claimedByStaffId === user?.id);
     if (delivered.length === 0) return "";
-    const codes = delivered.map(o => o.orderCode).join("\n");
-    return `✅ DELIVERY COMPLETED\nDelivered:\n${codes}\n\nThank you for shopping with RelaxShopping!`;
+    const byEstate: Record<string, string[]> = {};
+    for (const o of delivered) {
+      const eName = getEstateName(o.estateId);
+      if (!byEstate[eName]) byEstate[eName] = [];
+      byEstate[eName].push(o.orderCode);
+    }
+    const lines = Object.entries(byEstate).map(([estate, codes]) =>
+      `📍 ${estate}\n${codes.map(c => `  ✓ ${c}`).join("\n")}`
+    ).join("\n\n");
+    return `✅ DELIVERY COMPLETED\n\n${lines}\n\nThank you for shopping with RelaxShopping!`;
   };
 
   const copyToClipboard = (text: string) => {
@@ -223,7 +251,12 @@ export default function StaffDashboard() {
 
       <main className="container max-w-3xl mx-auto px-4 py-6">
         <h1 className="text-2xl font-bold mb-1" data-testid="text-staff-title">Staff Dashboard</h1>
-        <p className="text-sm text-muted-foreground mb-4">LGA Operations</p>
+        <div className="flex items-center gap-1 text-sm text-muted-foreground mb-4" data-testid="text-staff-location">
+          <MapPin className="w-3.5 h-3.5" />
+          <span>{stateName}</span>
+          <span>→</span>
+          <span>{lgaName}</span>
+        </div>
 
         <div className="flex gap-1 mb-6 overflow-x-auto pb-2">
           {tabs.map(t => (
