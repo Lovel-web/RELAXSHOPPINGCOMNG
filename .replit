@@ -41,3 +41,8 @@ author = "agent"
 task = "shell.exec"
 args = "npm run dev"
 waitForPort = 5000
+
+[userenv]
+
+[userenv.shared]
+SUPABASE_SERVICE_ROLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imt4cHdkcndoZ3VucWtpcmxucWd6Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTk3Njc1NiwiZXhwIjoyMDg3NTUyNzU2fQ.SwFgvZt63S3-x9VkXyB-vm6EKABQlq10IKUqcn4E7dU"
