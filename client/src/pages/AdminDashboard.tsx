@@ -326,11 +326,24 @@ function UsersPanel({ pendingUsers, usersList, approveUser }: {
   );
 }
 
+function UserLocationDisplay({ user, statesData }: { user: User; statesData: any }) {
+  const { data: lgasData } = useLgas(user.stateId || undefined);
+  const statesList = (statesData as State[]) || [];
+  const lgasList = (lgasData as Lga[]) || [];
+  const stateName = statesList.find(s => s.id === user.stateId)?.name;
+  const lgaName = lgasList.find(l => l.id === user.lgaId)?.name;
+  const parts = [stateName, lgaName].filter(Boolean);
+  return (
+    <p className="font-medium" data-testid="text-user-location">
+      {parts.length > 0 ? parts.join(" → ") : "Not assigned"}
+    </p>
+  );
+}
+
 function UserDetailView({ userId, onBack }: { userId: number; onBack: () => void }) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { data: statesData } = useStates();
-
   const { data: user, isLoading: userLoading } = useQuery<User>({
     queryKey: ["/api/users", userId],
     queryFn: async () => {
@@ -429,6 +442,15 @@ function UserDetailView({ userId, onBack }: { userId: number; onBack: () => void
                 </div>
               )}
             </>
+          )}
+          {(user.stateId || user.lgaId) && (
+            <div className="md:col-span-2 pt-2 border-t border-border/30 mt-2">
+              <p className="text-muted-foreground mb-1">Location</p>
+              <div className="flex items-center gap-2">
+                <MapPin className="w-4 h-4 text-primary" />
+                <UserLocationDisplay user={user} statesData={statesData} />
+              </div>
+            </div>
           )}
         </div>
       </div>

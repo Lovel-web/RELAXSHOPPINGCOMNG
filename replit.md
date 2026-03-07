@@ -24,8 +24,10 @@ Geo-locked WhatsApp-driven, mobile-first LGA marketplace for Nigerian communitie
 - User profiles stored in Replit PostgreSQL `users` table with `supabase_id` foreign link
 - Login flow: Supabase Auth → fetch profile from `/api/auth/me` → role-based redirect
 - Separate signup pages: /join (customer), /vendor-signup (vendor with bank verification), /staff-signup (staff)
+- Forgot password: /forgot-password → sends Supabase reset email → /reset-password page with new password form
 - Route protection via `<ProtectedRoute allowedRoles={[...]}>` component
 - Vendor/staff accounts default to `approved=false`, require admin approval
+- Minimum password length: 8 characters (enforced client-side on all forms)
 
 ## Database Tables
 - `states`, `lgas`, `estates` - Location hierarchy with isActive soft-delete, estate abbreviations, LGA WhatsApp links
@@ -76,7 +78,7 @@ Geo-locked WhatsApp-driven, mobile-first LGA marketplace for Nigerian communitie
 ## Project Structure
 ```
 client/src/
-  pages/         - Landing, JoinCustomer, Home, Cart, Checkout, Success, PaymentCallback, Receipt, Auth, PendingApproval, VendorSignup, StaffSignup, VendorDashboard, StaffDashboard, AdminDashboard
+  pages/         - Landing, JoinCustomer, Home, Cart, Checkout, Success, PaymentCallback, Receipt, Auth, ForgotPassword, ResetPassword, PendingApproval, VendorSignup, StaffSignup, VendorDashboard, StaffDashboard, AdminDashboard
   components/    - Navigation, ProductCard, ProtectedRoute, shadcn UI components
   hooks/         - use-auth, use-cart, use-products, use-orders, use-locations, use-toast
   lib/           - supabase, queryClient, utils
@@ -115,6 +117,7 @@ uploads/         - Vendor product images (served statically)
 - `GET /api/users`, `GET /api/users/:id`, `PATCH /api/users/:id/approve` - User management
 - `PATCH /api/users/:id/block` - Block user (set approved=false)
 - `DELETE /api/users/:id` - Deactivate user (soft-delete: approved=false, supabaseId=null)
+- `DELETE /api/users/:id/permanent` - Permanently delete user (removes from both local DB and Supabase Auth)
 - `PATCH /api/users/:id/reassign` - Reassign user location (stateId+lgaId)
 - `GET /api/users/:id/orders` - User order history
 - `POST /api/states`, `POST /api/lgas`, `POST /api/estates` - Create locations
@@ -134,6 +137,7 @@ uploads/         - Vendor product images (served statically)
 - `PAYSTACK_SECRET_KEY` - Paystack secret key
 - `PAYSTACK_WEBHOOK_SECRET` - Paystack webhook secret
 - `SESSION_SECRET` - Express session secret
+- `SUPABASE_SERVICE_ROLE_KEY` - Supabase service role key (for admin operations like permanent user deletion)
 
 ## Running
 - `npm run dev` starts both Express backend and Vite frontend on port 5000

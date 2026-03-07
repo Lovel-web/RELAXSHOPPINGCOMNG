@@ -1120,9 +1120,30 @@ export async function registerRoutes(
       if (userId === req.user!.id) {
         return res.status(400).json({ message: "Cannot delete your own account" });
       }
+      const targetUser = await storage.getUserById(userId);
+      if (!targetUser) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      if (targetUser.supabaseId) {
+        const supabaseUrl = process.env.VITE_SUPABASE_URL;
+        const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+        if (!supabaseUrl || !serviceRoleKey) {
+          return res.status(500).json({ message: "Supabase admin credentials not configured" });
+        }
+        const { createClient } = await import("@supabase/supabase-js");
+        const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
+          auth: { autoRefreshToken: false, persistSession: false }
+        });
+        const { error: supaError } = await supabaseAdmin.auth.admin.deleteUser(targetUser.supabaseId);
+        if (supaError) {
+          console.error("Supabase Auth delete failed:", supaError.message);
+          return res.status(500).json({ message: "Failed to delete user from authentication system" });
+        }
+      }
       await storage.deleteUserPermanent(userId);
       res.json({ success: true });
     } catch (err) {
+      console.error("Permanent delete error:", err);
       res.status(500).json({ message: "Failed to permanently delete user" });
     }
   });

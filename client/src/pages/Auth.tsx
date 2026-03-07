@@ -73,7 +73,7 @@ export default function Auth() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
-                  minLength={6}
+                  minLength={8}
                 />
                 <button
                   type="button"
@@ -99,6 +99,12 @@ export default function Auth() {
               )}
             </Button>
           </form>
+
+          <div className="mt-3 text-center">
+            <Link href="/forgot-password">
+              <span className="text-sm text-primary hover:underline cursor-pointer" data-testid="link-forgot-password">Forgot Password?</span>
+            </Link>
+          </div>
 
           <div className="mt-6 pt-4 border-t border-border/50 space-y-2 text-center text-sm">
             <p className="text-muted-foreground">Don't have an account?</p>
