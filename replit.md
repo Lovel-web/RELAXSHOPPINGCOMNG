@@ -15,7 +15,7 @@ Geo-locked WhatsApp-driven, mobile-first LGA marketplace for Nigerian communitie
 
 ## System Roles
 - **Customer**: Browse products (LGA-locked), add to cart, checkout, pay via Paystack (auto-approved on signup)
-- **Vendor**: Upload products (manual with image + CSV), view own products, bank verified on signup via Paystack (requires admin approval)
+- **Vendor**: Upload products (manual with image + CSV), edit/delete products, custom categories via "Other" option, view payment history/receipts, edit bank details with Paystack re-verification, see assigned State→LGA location (requires admin approval)
 - **Staff**: LGA-isolated 4-tab dashboard (Batch Board, Vendor Pickup, Delivery, WhatsApp), item-level vendor settlement, order claiming, batch locking (requires admin approval)
 - **Admin**: Overview dashboard, user management (approve/block/deactivate/reassign with detail views), hierarchical location drill-down (state→LGA→estate with pause/resume/delete), finance panel with settlement toggle + system mode controller
 
@@ -101,6 +101,10 @@ uploads/         - Vendor product images (served statically)
 ### Authenticated
 - `POST /api/upload` - Image upload
 - `POST /api/products` - Create product (vendor, auto-assigns lgaId)
+- `PATCH /api/products/:id` - Update product (vendor, owner-only)
+- `DELETE /api/products/:id` - Delete product (vendor, owner-only, blocked if active orders exist)
+- `GET /api/vendor/payments` - Vendor payment history (vendor-only)
+- `PATCH /api/profile/bank` - Update bank details with Paystack re-verification (vendor-only)
 - `GET /api/orders` - Orders (role-filtered)
 - `PATCH /api/orders/:id/status` - State machine transitions
 - `POST /api/checkout/initialize` - Start payment flow

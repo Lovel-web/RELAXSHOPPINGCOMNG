@@ -15,6 +15,9 @@ export interface IStorage {
   getProducts(lgaId?: number): Promise<Product[]>;
   getProduct(id: number): Promise<Product | undefined>;
   createProduct(product: Omit<Product, "id">): Promise<Product>;
+  updateProduct(id: number, data: Partial<Product>): Promise<Product>;
+  deleteProduct(id: number): Promise<void>;
+  getVendorPaymentsByVendor(vendorId: number): Promise<VendorPayment[]>;
   createUser(user: Omit<User, "id">): Promise<User>;
   getUserById(id: number): Promise<User | undefined>;
   getUserByPhone(phone: string): Promise<User | undefined>;
@@ -94,6 +97,16 @@ export class DatabaseStorage implements IStorage {
   async createProduct(product: Omit<Product, "id">): Promise<Product> {
     const [newProduct] = await db.insert(products).values(product).returning();
     return newProduct;
+  }
+  async updateProduct(id: number, data: Partial<Product>): Promise<Product> {
+    const [updated] = await db.update(products).set(data).where(eq(products.id, id)).returning();
+    return updated;
+  }
+  async deleteProduct(id: number): Promise<void> {
+    await db.delete(products).where(eq(products.id, id));
+  }
+  async getVendorPaymentsByVendor(vendorId: number): Promise<VendorPayment[]> {
+    return await db.select().from(vendorPayments).where(eq(vendorPayments.vendorId, vendorId));
   }
   async createUser(user: Omit<User, "id">): Promise<User> {
     const [newUser] = await db.insert(users).values(user).returning();
