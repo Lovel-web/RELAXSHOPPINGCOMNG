@@ -114,11 +114,11 @@ export default function StaffSignup() {
                   id="password"
                   type={showPassword ? "text" : "password"}
                   data-testid="input-staff-password"
-                  placeholder="Min 6 characters"
+                  placeholder="Min 8 characters"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
-                  minLength={6}
+                  minLength={8}
                 />
                 <button
                   type="button"

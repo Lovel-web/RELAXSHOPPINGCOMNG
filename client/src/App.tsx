@@ -21,6 +21,8 @@ import VendorSignup from "@/pages/VendorSignup";
 import StaffSignup from "@/pages/StaffSignup";
 import Landing from "@/pages/Landing";
 import JoinCustomer from "@/pages/JoinCustomer";
+import ForgotPassword from "@/pages/ForgotPassword";
+import ResetPassword from "@/pages/ResetPassword";
 
 function Router() {
   return (
@@ -34,6 +36,8 @@ function Router() {
       <Route path="/payment/callback" component={PaymentCallback} />
       <Route path="/receipt/:id" component={Receipt} />
       <Route path="/login" component={Auth} />
+      <Route path="/forgot-password" component={ForgotPassword} />
+      <Route path="/reset-password" component={ResetPassword} />
       <Route path="/vendor-signup" component={VendorSignup} />
       <Route path="/staff-signup" component={StaffSignup} />
       <Route path="/pending-approval" component={PendingApproval} />
