@@ -347,7 +347,17 @@ export async function registerRoutes(
   });
 
   app.get('/api/auth/me', requireAuth, async (req, res) => {
-    res.json(req.user);
+    const user = req.user!;
+    let locationPaused = false;
+    if (user.stateId) {
+      const state = await storage.getStatesAll().then(ss => ss.find(s => s.id === user.stateId));
+      if (state && state.isActive === false) locationPaused = true;
+    }
+    if (!locationPaused && user.lgaId) {
+      const lga = await storage.getLga(user.lgaId);
+      if (lga && lga.isActive === false) locationPaused = true;
+    }
+    res.json({ ...user, locationPaused });
   });
 
   // === FILE UPLOAD ===
@@ -503,9 +513,14 @@ export async function registerRoutes(
 
       const estate = await storage.getEstate(estateId);
       if (!estate) return res.status(400).json({ message: "Invalid estate" });
+      if (estate.isActive === false) return res.status(400).json({ message: "This estate is currently paused. Shopping is temporarily unavailable." });
 
       const lga = await storage.getLga(estate.lgaId);
       if (!lga) return res.status(400).json({ message: "Invalid LGA" });
+      if (lga.isActive === false) return res.status(400).json({ message: "This area is currently paused. Shopping is temporarily unavailable." });
+
+      const stateCheck = (await storage.getStatesAll()).find(s => s.id === lga.stateId);
+      if (stateCheck && stateCheck.isActive === false) return res.status(400).json({ message: "This region is currently paused. Shopping is temporarily unavailable." });
 
       if (customer.lgaId && customer.lgaId !== estate.lgaId) {
         return res.status(400).json({ message: "Estate does not belong to the selected LGA" });
@@ -1071,6 +1086,321 @@ export async function registerRoutes(
     } catch (err) {
       res.status(500).json({ message: "Failed to deactivate estate" });
     }
+  });
+
+  // === ADMIN USER MANAGEMENT ===
+
+  app.get('/api/users/:id', requireAuth, requireRole("admin"), async (req, res) => {
+    try {
+      const user = await storage.getUserById(Number(req.params.id));
+      if (!user) return res.status(404).json({ message: "User not found" });
+      const state = user.stateId ? await storage.getEstate(user.stateId) : null;
+      res.json(user);
+    } catch (err) {
+      res.status(500).json({ message: "Failed to get user" });
+    }
+  });
+
+  app.delete('/api/users/:id', requireAuth, requireRole("admin"), async (req, res) => {
+    try {
+      const userId = Number(req.params.id);
+      if (userId === req.user!.id) {
+        return res.status(400).json({ message: "Cannot delete your own account" });
+      }
+      await storage.deleteUser(userId);
+      res.json({ success: true });
+    } catch (err) {
+      res.status(500).json({ message: "Failed to delete user" });
+    }
+  });
+
+  app.patch('/api/users/:id/block', requireAuth, requireRole("admin"), async (req, res) => {
+    try {
+      const userId = Number(req.params.id);
+      if (userId === req.user!.id) {
+        return res.status(400).json({ message: "Cannot block your own account" });
+      }
+      const updated = await storage.updateUser(userId, { approved: false });
+      res.json(updated);
+    } catch (err) {
+      res.status(400).json({ message: "Failed to block user" });
+    }
+  });
+
+  app.patch('/api/users/:id/reassign', requireAuth, requireRole("admin"), async (req, res) => {
+    try {
+      const userId = Number(req.params.id);
+      const { stateId, lgaId } = req.body;
+      if (!stateId || !lgaId) {
+        return res.status(400).json({ message: "stateId and lgaId required" });
+      }
+      const user = await storage.getUserById(userId);
+      if (!user) return res.status(404).json({ message: "User not found" });
+
+      const updated = await storage.updateUser(userId, { stateId, lgaId });
+
+      if (user.role === 'vendor') {
+        const client = await pool.connect();
+        try {
+          await client.query('UPDATE products SET lga_id = $1 WHERE vendor_id = $2', [lgaId, userId]);
+        } finally {
+          client.release();
+        }
+      }
+
+      res.json(updated);
+    } catch (err) {
+      res.status(400).json({ message: "Failed to reassign user" });
+    }
+  });
+
+  app.get('/api/users/:id/orders', requireAuth, requireRole("admin"), async (req, res) => {
+    try {
+      const userId = Number(req.params.id);
+      const user = await storage.getUserById(userId);
+      if (!user) return res.status(404).json({ message: "User not found" });
+
+      let userOrders: any[] = [];
+      if (user.role === 'customer') {
+        userOrders = await storage.getOrdersByCustomerId(userId);
+      } else if (user.role === 'staff') {
+        userOrders = await storage.getOrdersByStaffId(userId);
+      } else if (user.role === 'vendor') {
+        const allOrders = await storage.getOrders();
+        const vendorOrderIds = new Set<number>();
+        for (const order of allOrders) {
+          const items = await storage.getOrderItems(order.id);
+          for (const item of items) {
+            const prod = await storage.getProduct(item.productId);
+            if (prod && prod.vendorId === userId) {
+              vendorOrderIds.add(order.id);
+            }
+          }
+        }
+        userOrders = allOrders.filter(o => vendorOrderIds.has(o.id));
+      }
+
+      res.json(userOrders);
+    } catch (err) {
+      res.status(500).json({ message: "Failed to load user orders" });
+    }
+  });
+
+  // === ADMIN LOCATION SUMMARIES ===
+
+  app.get('/api/states/:id/summary', requireAuth, requireRole("admin"), async (req, res) => {
+    try {
+      const stateId = Number(req.params.id);
+      const stateUsers = await storage.getUsersByState(stateId);
+      const stateLgas = await storage.getLgasAll(stateId);
+      const stateOrders = await storage.getOrders();
+      const ordersInState = stateOrders.filter(o => o.stateId === stateId);
+      const deliveredInState = ordersInState.filter(o => o.status === 'delivered');
+
+      let estateCount = 0;
+      for (const lga of stateLgas) {
+        const lgaEstates = await storage.getEstatesAll(lga.id);
+        estateCount += lgaEstates.length;
+      }
+
+      res.json({
+        stateId,
+        lgaCount: stateLgas.length,
+        estateCount,
+        vendors: stateUsers.filter(u => u.role === 'vendor').length,
+        staff: stateUsers.filter(u => u.role === 'staff').length,
+        customers: stateUsers.filter(u => u.role === 'customer').length,
+        totalOrders: ordersInState.length,
+        deliveredOrders: deliveredInState.length,
+        totalRevenue: ordersInState.reduce((sum, o) => sum + o.totalAmount, 0),
+      });
+    } catch (err) {
+      res.status(500).json({ message: "Failed to load state summary" });
+    }
+  });
+
+  app.get('/api/lgas/:id/summary', requireAuth, requireRole("admin"), async (req, res) => {
+    try {
+      const lgaId = Number(req.params.id);
+      const lgaUsers = await storage.getUsersByLga(lgaId);
+      const lgaEstates = await storage.getEstatesAll(lgaId);
+      const lgaOrders = (await storage.getOrders()).filter(o => o.lgaId === lgaId);
+      const deliveredInLga = lgaOrders.filter(o => o.status === 'delivered');
+
+      res.json({
+        lgaId,
+        estateCount: lgaEstates.length,
+        vendors: lgaUsers.filter(u => u.role === 'vendor').length,
+        staff: lgaUsers.filter(u => u.role === 'staff').length,
+        customers: lgaUsers.filter(u => u.role === 'customer').length,
+        totalOrders: lgaOrders.length,
+        deliveredOrders: deliveredInLga.length,
+        totalRevenue: lgaOrders.reduce((sum, o) => sum + o.totalAmount, 0),
+      });
+    } catch (err) {
+      res.status(500).json({ message: "Failed to load LGA summary" });
+    }
+  });
+
+  // === LOCATION PAUSE / RESUME ===
+
+  app.patch('/api/states/:id/pause', requireAuth, requireRole("admin"), async (req, res) => {
+    try {
+      const stateId = Number(req.params.id);
+      await storage.deactivateState(stateId);
+      const stateLgas = await storage.getLgasAll(stateId);
+      for (const lga of stateLgas) {
+        await storage.deactivateLga(lga.id);
+        const lgaEstates = await storage.getEstatesAll(lga.id);
+        for (const estate of lgaEstates) {
+          await storage.deactivateEstate(estate.id);
+        }
+      }
+      res.json({ success: true });
+    } catch (err) {
+      res.status(500).json({ message: "Failed to pause state" });
+    }
+  });
+
+  app.patch('/api/states/:id/resume', requireAuth, requireRole("admin"), async (req, res) => {
+    try {
+      const stateId = Number(req.params.id);
+      await storage.reactivateState(stateId);
+      const stateLgas = await storage.getLgasAll(stateId);
+      for (const lga of stateLgas) {
+        await storage.reactivateLga(lga.id);
+        const lgaEstates = await storage.getEstatesAll(lga.id);
+        for (const estate of lgaEstates) {
+          await storage.reactivateEstate(estate.id);
+        }
+      }
+      res.json({ success: true });
+    } catch (err) {
+      res.status(500).json({ message: "Failed to resume state" });
+    }
+  });
+
+  app.patch('/api/lgas/:id/pause', requireAuth, requireRole("admin"), async (req, res) => {
+    try {
+      const lgaId = Number(req.params.id);
+      await storage.deactivateLga(lgaId);
+      const lgaEstates = await storage.getEstatesAll(lgaId);
+      for (const estate of lgaEstates) {
+        await storage.deactivateEstate(estate.id);
+      }
+      res.json({ success: true });
+    } catch (err) {
+      res.status(500).json({ message: "Failed to pause LGA" });
+    }
+  });
+
+  app.patch('/api/lgas/:id/resume', requireAuth, requireRole("admin"), async (req, res) => {
+    try {
+      const lgaId = Number(req.params.id);
+      await storage.reactivateLga(lgaId);
+      const lgaEstates = await storage.getEstatesAll(lgaId);
+      for (const estate of lgaEstates) {
+        await storage.reactivateEstate(estate.id);
+      }
+      res.json({ success: true });
+    } catch (err) {
+      res.status(500).json({ message: "Failed to resume LGA" });
+    }
+  });
+
+  app.patch('/api/estates/:id/pause', requireAuth, requireRole("admin"), async (req, res) => {
+    try {
+      await storage.deactivateEstate(Number(req.params.id));
+      res.json({ success: true });
+    } catch (err) {
+      res.status(500).json({ message: "Failed to pause estate" });
+    }
+  });
+
+  app.patch('/api/estates/:id/resume', requireAuth, requireRole("admin"), async (req, res) => {
+    try {
+      await storage.reactivateEstate(Number(req.params.id));
+      res.json({ success: true });
+    } catch (err) {
+      res.status(500).json({ message: "Failed to resume estate" });
+    }
+  });
+
+  // === LOCATION HARD DELETE ===
+
+  app.delete('/api/states/:id/permanent', requireAuth, requireRole("admin"), async (req, res) => {
+    try {
+      const stateId = Number(req.params.id);
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        await client.query('UPDATE users SET state_id = NULL, lga_id = NULL, approved = false WHERE state_id = $1', [stateId]);
+        const lgasResult = await client.query('SELECT id FROM lgas WHERE state_id = $1', [stateId]);
+        for (const row of lgasResult.rows) {
+          await client.query('DELETE FROM estates WHERE lga_id = $1', [row.id]);
+        }
+        await client.query('DELETE FROM lgas WHERE state_id = $1', [stateId]);
+        await client.query('DELETE FROM states WHERE id = $1', [stateId]);
+        await client.query('COMMIT');
+      } catch (err) {
+        await client.query('ROLLBACK');
+        throw err;
+      } finally {
+        client.release();
+      }
+      res.json({ success: true });
+    } catch (err) {
+      res.status(500).json({ message: "Failed to permanently delete state" });
+    }
+  });
+
+  app.delete('/api/lgas/:id/permanent', requireAuth, requireRole("admin"), async (req, res) => {
+    try {
+      const lgaId = Number(req.params.id);
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        await client.query('UPDATE users SET lga_id = NULL, approved = false WHERE lga_id = $1', [lgaId]);
+        await client.query('DELETE FROM estates WHERE lga_id = $1', [lgaId]);
+        await client.query('DELETE FROM lgas WHERE id = $1', [lgaId]);
+        await client.query('COMMIT');
+      } catch (err) {
+        await client.query('ROLLBACK');
+        throw err;
+      } finally {
+        client.release();
+      }
+      res.json({ success: true });
+    } catch (err) {
+      res.status(500).json({ message: "Failed to permanently delete LGA" });
+    }
+  });
+
+  app.delete('/api/estates/:id/permanent', requireAuth, requireRole("admin"), async (req, res) => {
+    try {
+      const estateId = Number(req.params.id);
+      await pool.query('DELETE FROM estates WHERE id = $1', [estateId]);
+      res.json({ success: true });
+    } catch (err) {
+      res.status(500).json({ message: "Failed to permanently delete estate" });
+    }
+  });
+
+  // === ADMIN: Location status info (includes paused) ===
+
+  app.get('/api/admin/states', requireAuth, requireRole("admin"), async (_req, res) => {
+    const allStates = await storage.getStatesAll();
+    res.json(allStates);
+  });
+
+  app.get('/api/admin/states/:stateId/lgas', requireAuth, requireRole("admin"), async (req, res) => {
+    const lgaList = await storage.getLgasAll(Number(req.params.stateId));
+    res.json(lgaList);
+  });
+
+  app.get('/api/admin/lgas/:lgaId/estates', requireAuth, requireRole("admin"), async (req, res) => {
+    const estateList = await storage.getEstatesAll(Number(req.params.lgaId));
+    res.json(estateList);
   });
 
   return httpServer;

@@ -17,7 +17,7 @@ Geo-locked WhatsApp-driven, mobile-first LGA marketplace for Nigerian communitie
 - **Customer**: Browse products (LGA-locked), add to cart, checkout, pay via Paystack (auto-approved on signup)
 - **Vendor**: Upload products (manual with image + CSV), view own products, bank verified on signup via Paystack (requires admin approval)
 - **Staff**: LGA-isolated 4-tab dashboard (Batch Board, Vendor Pickup, Delivery, WhatsApp), item-level vendor settlement, order claiming, batch locking (requires admin approval)
-- **Admin**: Overview dashboard, user approval, location management (states/LGAs/estates), finance panel with settlement toggle + system mode controller
+- **Admin**: Overview dashboard, user management (approve/block/deactivate/reassign with detail views), hierarchical location drill-down (state→LGA→estate with pause/resume/delete), finance panel with settlement toggle + system mode controller
 
 ## Auth Architecture
 - Supabase handles email/password authentication only
@@ -70,6 +70,8 @@ Geo-locked WhatsApp-driven, mobile-first LGA marketplace for Nigerian communitie
 - **System mode controller**: normal/maintenance/emergency (blocks checkout/settlements as appropriate)
 - **Settlement toggle**: admin can disable all vendor payouts
 - **Soft-delete locations**: isActive flag, blocked if active vendors/pending orders exist
+- **Location pause guard**: Paused locations block checkout server-side; users in paused locations see "area on hold" message
+- **Role-aware navigation**: Admin/staff/vendor see Dashboard+Logout only; customers see Shop+Cart+Logout
 
 ## Project Structure
 ```
@@ -110,9 +112,18 @@ uploads/         - Vendor product images (served statically)
 - `POST /api/batches/lock`, `POST /api/batches/unlock`, `GET /api/batches/status` - Batch management
 
 ### Admin
-- `GET /api/users`, `PATCH /api/users/:id/approve` - User management
+- `GET /api/users`, `GET /api/users/:id`, `PATCH /api/users/:id/approve` - User management
+- `PATCH /api/users/:id/block` - Block user (set approved=false)
+- `DELETE /api/users/:id` - Deactivate user (soft-delete: approved=false, supabaseId=null)
+- `PATCH /api/users/:id/reassign` - Reassign user location (stateId+lgaId)
+- `GET /api/users/:id/orders` - User order history
 - `POST /api/states`, `POST /api/lgas`, `POST /api/estates` - Create locations
 - `DELETE /api/states/:id`, `DELETE /api/lgas/:id`, `DELETE /api/estates/:id` - Soft-delete locations
+- `PATCH /api/{states,lgas,estates}/:id/pause` - Pause location (cascades to children)
+- `PATCH /api/{states,lgas,estates}/:id/resume` - Resume location (cascades to children)
+- `DELETE /api/{states,lgas,estates}/:id/permanent` - Hard delete location + unlink users
+- `GET /api/admin/states`, `GET /api/admin/states/:id/lgas`, `GET /api/admin/lgas/:id/estates` - All locations (inc. paused)
+- `GET /api/states/:id/summary`, `GET /api/lgas/:id/summary` - Location stats
 - `GET /api/vendor-payments` - All settlements with audit trail
 - `GET /api/settings/:key`, `PATCH /api/settings/:key` - System settings
 
