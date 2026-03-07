@@ -19,8 +19,6 @@ export default function VendorSignup() {
   const [phone, setPhone] = useState("");
   const [stateId, setStateId] = useState<number | undefined>();
   const [lgaId, setLgaId] = useState<number | undefined>();
-  const [bankName, setBankName] = useState("");
-  const [accountNumber, setAccountNumber] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
   const { signUp, user } = useAuth();
@@ -54,24 +52,13 @@ export default function VendorSignup() {
       return;
     }
 
-    const profile: {
-      name: string;
-      phone: string;
-      role: string;
-      stateId: number;
-      lgaId: number;
-      bankName?: string;
-      accountNumber?: string;
-    } = {
+    const profile = {
       name,
       phone,
       role: "vendor",
       stateId,
       lgaId,
     };
-
-    if (bankName) profile.bankName = bankName;
-    if (accountNumber) profile.accountNumber = accountNumber;
 
     const result = await signUp(email, password, profile);
     if (result.error) {
@@ -202,31 +189,8 @@ export default function VendorSignup() {
               </Select>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="vendor-bank-code">Bank Code</Label>
-              <Input
-                id="vendor-bank-code"
-                data-testid="input-vendor-bank-code"
-                placeholder="e.g. 058 (GTBank), 033 (UBA)"
-                value={bankName}
-                onChange={(e) => setBankName(e.target.value)}
-              />
-              <p className="text-xs text-muted-foreground">Paystack bank code for settlement verification</p>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="vendor-account-number">Account Number</Label>
-              <Input
-                id="vendor-account-number"
-                data-testid="input-vendor-account-number"
-                placeholder="0123456789"
-                value={accountNumber}
-                onChange={(e) => setAccountNumber(e.target.value)}
-              />
-            </div>
-
             <p className="text-xs text-muted-foreground dark:text-muted-foreground bg-muted rounded-md p-3">
-              Your bank details will be verified via Paystack. Your vendor account requires admin approval before you can start selling.
+              Your vendor account requires admin approval before you can start selling. You can add your bank details later from your dashboard.
             </p>
 
             <Button
@@ -236,7 +200,7 @@ export default function VendorSignup() {
               data-testid="button-submit-vendor-signup"
             >
               {submitting ? (
-                <><Loader2 className="w-5 h-5 mr-2 animate-spin" /> Verifying &amp; Creating Account...</>
+                <><Loader2 className="w-5 h-5 mr-2 animate-spin" /> Creating Account...</>
               ) : (
                 "Create Vendor Account"
               )}
