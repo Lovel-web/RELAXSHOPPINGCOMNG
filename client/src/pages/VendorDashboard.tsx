@@ -50,6 +50,8 @@ const NIGERIAN_BANKS = [
 
 export default function VendorDashboard() {
   const { user, refreshProfile } = useAuth();
+  const vendorId = user?.id || 0;
+  const lgaId = user?.lgaId || 0;
   const { data: allProducts, isLoading } = useProducts();
   const myProducts = (allProducts as Product[] || []).filter(p => p.vendorId === vendorId);
   const createProduct = useCreateProduct();
@@ -86,9 +88,6 @@ export default function VendorDashboard() {
   const [bankCode, setBankCode] = useState(user?.bankName || "");
   const [bankAccNum, setBankAccNum] = useState(user?.accountNumber || "");
   const [bankSaving, setBankSaving] = useState(false);
-
-  const vendorId = user?.id || 0;
-  const lgaId = user?.lgaId || 0;
 
   const { data: statesData } = useStates();
   const { data: lgasData } = useLgas(user?.stateId || undefined);
