@@ -8,11 +8,11 @@ import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Package, Clock, CreditCard, Truck, Loader2, CheckCircle, Receipt, Lock, Unlock, Copy, MessageCircle, MapPin } from "lucide-react";
+import { Package, Clock, CreditCard, Truck, Loader2, CheckCircle, Receipt, Lock, Unlock, Copy, MessageCircle, MapPin, BarChart3 } from "lucide-react";
 import { type Order, type OrderItem, type Product, type State, type Lga, type Estate } from "@shared/schema";
 import { Link } from "wouter";
 
-type TabId = "batch" | "vendor" | "delivery" | "whatsapp";
+type TabId = "batch" | "vendor" | "delivery" | "whatsapp" | "stats";
 
 interface EnrichedItem extends OrderItem {
   product: Product;
@@ -52,6 +52,16 @@ export default function StaffDashboard() {
   const [totalPayout, setTotalPayout] = useState(0);
   const [paymentResults, setPaymentResults] = useState<any[]>([]);
   const [showReceipts, setShowReceipts] = useState(false);
+  const [statsPeriod, setStatsPeriod] = useState<"week" | "twoWeek" | "month" | "total">("week");
+
+  const { data: deliveryStats } = useQuery({
+    queryKey: ['/api/staff/delivery-stats'],
+    queryFn: async () => {
+      const res = await apiRequest("GET", "/api/staff/delivery-stats");
+      return await res.json();
+    },
+    enabled: tab === "stats",
+  });
 
   const allOrders = (orders as Order[] || []);
 
@@ -246,6 +256,7 @@ export default function StaffDashboard() {
     { id: "vendor", label: "Vendor Pickup", icon: CreditCard, count: Object.keys(vendorGroups).length },
     { id: "delivery", label: "Delivery", icon: Truck, count: readyOrders.length },
     { id: "whatsapp", label: "WhatsApp", icon: MessageCircle },
+    { id: "stats", label: "Stats", icon: BarChart3 },
   ];
 
   return (
@@ -512,6 +523,68 @@ export default function StaffDashboard() {
                 <Copy className="w-3 h-3 mr-1" /> Copy
               </Button>
             </div>
+          </div>
+        )}
+
+        {tab === "stats" && (
+          <div className="space-y-4" data-testid="section-delivery-stats">
+            <h2 className="font-semibold text-lg">Delivery Performance</h2>
+
+            <div className="flex gap-2 mb-4">
+              {([
+                { key: "week" as const, label: "1 Week" },
+                { key: "twoWeek" as const, label: "2 Weeks" },
+                { key: "month" as const, label: "1 Month" },
+                { key: "total" as const, label: "All Time" },
+              ]).map(p => (
+                <Button
+                  key={p.key}
+                  size="sm"
+                  variant={statsPeriod === p.key ? "default" : "outline"}
+                  onClick={() => setStatsPeriod(p.key)}
+                  data-testid={`button-stats-${p.key}`}
+                >
+                  {p.label}
+                </Button>
+              ))}
+            </div>
+
+            {deliveryStats ? (
+              <div className="bg-white dark:bg-card rounded-xl border border-border/50 p-6 text-center">
+                <div className="text-5xl font-bold text-primary mb-2" data-testid="text-stats-count">
+                  {deliveryStats[statsPeriod] ?? 0}
+                </div>
+                <p className="text-muted-foreground text-sm">
+                  {statsPeriod === "week" && "orders delivered this week"}
+                  {statsPeriod === "twoWeek" && "orders delivered in 2 weeks"}
+                  {statsPeriod === "month" && "orders delivered this month"}
+                  {statsPeriod === "total" && "total orders delivered"}
+                </p>
+
+                <div className="grid grid-cols-4 gap-3 mt-6 pt-4 border-t">
+                  <div>
+                    <p className="text-lg font-bold" data-testid="text-stats-week">{deliveryStats.week ?? 0}</p>
+                    <p className="text-xs text-muted-foreground">1 Week</p>
+                  </div>
+                  <div>
+                    <p className="text-lg font-bold" data-testid="text-stats-twoweek">{deliveryStats.twoWeek ?? 0}</p>
+                    <p className="text-xs text-muted-foreground">2 Weeks</p>
+                  </div>
+                  <div>
+                    <p className="text-lg font-bold" data-testid="text-stats-month">{deliveryStats.month ?? 0}</p>
+                    <p className="text-xs text-muted-foreground">1 Month</p>
+                  </div>
+                  <div>
+                    <p className="text-lg font-bold" data-testid="text-stats-total">{deliveryStats.total ?? 0}</p>
+                    <p className="text-xs text-muted-foreground">All Time</p>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+              </div>
+            )}
           </div>
         )}
 

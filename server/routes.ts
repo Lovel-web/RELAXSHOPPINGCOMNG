@@ -515,6 +515,25 @@ export async function registerRoutes(
     res.json(allOrders);
   });
 
+  app.get('/api/staff/delivery-stats', requireAuth, requireRole("staff"), async (req, res) => {
+    try {
+      const staffOrders = await storage.getOrdersByStaffId(req.user!.id);
+      const delivered = staffOrders.filter(o => o.status === "delivered");
+      const now = Date.now();
+      const oneWeek = 7 * 24 * 60 * 60 * 1000;
+      const twoWeeks = 14 * 24 * 60 * 60 * 1000;
+      const oneMonth = 30 * 24 * 60 * 60 * 1000;
+      const week = delivered.filter(o => o.createdAt && (now - new Date(o.createdAt).getTime()) <= oneWeek).length;
+      const twoWeek = delivered.filter(o => o.createdAt && (now - new Date(o.createdAt).getTime()) <= twoWeeks).length;
+      const month = delivered.filter(o => o.createdAt && (now - new Date(o.createdAt).getTime()) <= oneMonth).length;
+      const total = delivered.length;
+      res.json({ week, twoWeek, month, total });
+    } catch (err) {
+      console.error("Staff delivery stats error:", err);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
   app.patch('/api/orders/:id/status', requireAuth, requireRole("staff", "admin"), async (req, res) => {
     try {
       const { status } = req.body;
