@@ -8,7 +8,9 @@ import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Package, Clock, CreditCard, Truck, Loader2, CheckCircle, Receipt, Lock, Unlock, Copy, MessageCircle, MapPin, BarChart3 } from "lucide-react";
+import { Package, Clock, CreditCard, Truck, Loader2, CheckCircle, Receipt, Lock, Unlock, Copy, MessageCircle, MapPin, BarChart3, CalendarIcon } from "lucide-react";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { type Order, type OrderItem, type Product, type State, type Lga, type Estate } from "@shared/schema";
 import { Link } from "wouter";
 
@@ -52,16 +54,26 @@ export default function StaffDashboard() {
   const [totalPayout, setTotalPayout] = useState(0);
   const [paymentResults, setPaymentResults] = useState<any[]>([]);
   const [showReceipts, setShowReceipts] = useState(false);
-  const [statsPeriod, setStatsPeriod] = useState<"week" | "twoWeek" | "month" | "total">("week");
+  const [statsFrom, setStatsFrom] = useState<Date>(new Date());
+  const [statsPeriod, setStatsPeriod] = useState<"week" | "twoWeek" | "month">("week");
 
-  const { data: deliveryStats } = useQuery({
-    queryKey: ['/api/staff/delivery-stats'],
+  const statsFromISO = statsFrom.toISOString().slice(0, 10);
+  const { data: deliveryStats, isLoading: statsLoading } = useQuery({
+    queryKey: ['/api/staff/delivery-stats', statsFromISO],
     queryFn: async () => {
-      const res = await apiRequest("GET", "/api/staff/delivery-stats");
+      const res = await apiRequest("GET", `/api/staff/delivery-stats?from=${statsFromISO}`);
       return await res.json();
     },
     enabled: tab === "stats",
   });
+
+  const getStatsEndLabel = () => {
+    const d = new Date(statsFrom);
+    if (statsPeriod === "week") d.setDate(d.getDate() + 7);
+    else if (statsPeriod === "twoWeek") d.setDate(d.getDate() + 14);
+    else d.setDate(d.getDate() + 30);
+    return d.toLocaleDateString("en-NG", { day: "numeric", month: "short", year: "numeric" });
+  };
 
   const allOrders = (orders as Order[] || []);
 
@@ -530,61 +542,87 @@ export default function StaffDashboard() {
           <div className="space-y-4" data-testid="section-delivery-stats">
             <h2 className="font-semibold text-lg">Delivery Performance</h2>
 
-            <div className="flex gap-2 mb-4">
-              {([
-                { key: "week" as const, label: "1 Week" },
-                { key: "twoWeek" as const, label: "2 Weeks" },
-                { key: "month" as const, label: "1 Month" },
-                { key: "total" as const, label: "All Time" },
-              ]).map(p => (
-                <Button
-                  key={p.key}
-                  size="sm"
-                  variant={statsPeriod === p.key ? "default" : "outline"}
-                  onClick={() => setStatsPeriod(p.key)}
-                  data-testid={`button-stats-${p.key}`}
-                >
-                  {p.label}
-                </Button>
-              ))}
+            <div className="bg-white dark:bg-card rounded-xl border border-border/50 p-4 space-y-4">
+              <p className="text-sm font-medium text-muted-foreground">Start from</p>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" className="w-full justify-start text-left font-normal" data-testid="button-stats-calendar">
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    {statsFrom.toLocaleDateString("en-NG", { day: "numeric", month: "long", year: "numeric" })}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                    mode="single"
+                    selected={statsFrom}
+                    onSelect={(d) => d && setStatsFrom(d)}
+                    disabled={(d) => d > new Date()}
+                    initialFocus
+                  />
+                </PopoverContent>
+              </Popover>
+
+              <p className="text-sm font-medium text-muted-foreground">Sort by period</p>
+              <div className="grid grid-cols-3 gap-2">
+                {([
+                  { key: "week" as const, label: "Weekly" },
+                  { key: "twoWeek" as const, label: "Bi-weekly" },
+                  { key: "month" as const, label: "Monthly" },
+                ]).map(p => (
+                  <Button
+                    key={p.key}
+                    size="sm"
+                    variant={statsPeriod === p.key ? "default" : "outline"}
+                    onClick={() => setStatsPeriod(p.key)}
+                    data-testid={`button-stats-${p.key}`}
+                  >
+                    {p.label}
+                  </Button>
+                ))}
+              </div>
             </div>
 
-            {deliveryStats ? (
-              <div className="bg-white dark:bg-card rounded-xl border border-border/50 p-6 text-center">
-                <div className="text-5xl font-bold text-primary mb-2" data-testid="text-stats-count">
-                  {deliveryStats[statsPeriod] ?? 0}
-                </div>
-                <p className="text-muted-foreground text-sm">
-                  {statsPeriod === "week" && "orders delivered this week"}
-                  {statsPeriod === "twoWeek" && "orders delivered in 2 weeks"}
-                  {statsPeriod === "month" && "orders delivered this month"}
-                  {statsPeriod === "total" && "total orders delivered"}
-                </p>
-
-                <div className="grid grid-cols-4 gap-3 mt-6 pt-4 border-t">
-                  <div>
-                    <p className="text-lg font-bold" data-testid="text-stats-week">{deliveryStats.week ?? 0}</p>
-                    <p className="text-xs text-muted-foreground">1 Week</p>
-                  </div>
-                  <div>
-                    <p className="text-lg font-bold" data-testid="text-stats-twoweek">{deliveryStats.twoWeek ?? 0}</p>
-                    <p className="text-xs text-muted-foreground">2 Weeks</p>
-                  </div>
-                  <div>
-                    <p className="text-lg font-bold" data-testid="text-stats-month">{deliveryStats.month ?? 0}</p>
-                    <p className="text-xs text-muted-foreground">1 Month</p>
-                  </div>
-                  <div>
-                    <p className="text-lg font-bold" data-testid="text-stats-total">{deliveryStats.total ?? 0}</p>
-                    <p className="text-xs text-muted-foreground">All Time</p>
-                  </div>
-                </div>
-              </div>
-            ) : (
+            {statsLoading ? (
               <div className="flex items-center justify-center py-12">
                 <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
               </div>
-            )}
+            ) : deliveryStats ? (
+              <div className="space-y-3">
+                <div className="bg-primary/5 rounded-xl border border-primary/20 p-6 text-center">
+                  <div className="text-5xl font-bold text-primary mb-1" data-testid="text-stats-count">
+                    {deliveryStats[statsPeriod] ?? 0}
+                  </div>
+                  <p className="text-sm text-muted-foreground">
+                    deliveries from{" "}
+                    <span className="font-medium text-foreground">
+                      {statsFrom.toLocaleDateString("en-NG", { day: "numeric", month: "short" })}
+                    </span>
+                    {" "}to{" "}
+                    <span className="font-medium text-foreground">{getStatsEndLabel()}</span>
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-3 gap-3">
+                  <div className={`rounded-xl border p-4 text-center transition-colors ${statsPeriod === "week" ? "border-primary bg-primary/5" : "border-border/50 bg-white dark:bg-card"}`}>
+                    <p className="text-2xl font-bold" data-testid="text-stats-week">{deliveryStats.week ?? 0}</p>
+                    <p className="text-xs text-muted-foreground mt-1">7 days</p>
+                  </div>
+                  <div className={`rounded-xl border p-4 text-center transition-colors ${statsPeriod === "twoWeek" ? "border-primary bg-primary/5" : "border-border/50 bg-white dark:bg-card"}`}>
+                    <p className="text-2xl font-bold" data-testid="text-stats-twoweek">{deliveryStats.twoWeek ?? 0}</p>
+                    <p className="text-xs text-muted-foreground mt-1">14 days</p>
+                  </div>
+                  <div className={`rounded-xl border p-4 text-center transition-colors ${statsPeriod === "month" ? "border-primary bg-primary/5" : "border-border/50 bg-white dark:bg-card"}`}>
+                    <p className="text-2xl font-bold" data-testid="text-stats-month">{deliveryStats.month ?? 0}</p>
+                    <p className="text-xs text-muted-foreground mt-1">30 days</p>
+                  </div>
+                </div>
+
+                <div className="bg-white dark:bg-card rounded-xl border border-border/50 p-4">
+                  <p className="text-sm font-medium mb-1">Total from selected date</p>
+                  <p className="text-lg font-bold text-primary" data-testid="text-stats-total">{deliveryStats.total ?? 0} deliveries</p>
+                </div>
+              </div>
+            ) : null}
           </div>
         )}
 

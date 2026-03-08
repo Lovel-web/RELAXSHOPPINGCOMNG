@@ -519,15 +519,34 @@ export async function registerRoutes(
     try {
       const staffOrders = await storage.getOrdersByStaffId(req.user!.id);
       const delivered = staffOrders.filter(o => o.status === "delivered");
-      const now = Date.now();
+      const fromDate = req.query.from ? new Date(req.query.from as string) : null;
+      const startMs = fromDate ? fromDate.getTime() : 0;
+
+      const filtered = fromDate
+        ? delivered.filter(o => o.createdAt && new Date(o.createdAt).getTime() >= startMs)
+        : delivered;
+
       const oneWeek = 7 * 24 * 60 * 60 * 1000;
       const twoWeeks = 14 * 24 * 60 * 60 * 1000;
       const oneMonth = 30 * 24 * 60 * 60 * 1000;
-      const week = delivered.filter(o => o.createdAt && (now - new Date(o.createdAt).getTime()) <= oneWeek).length;
-      const twoWeek = delivered.filter(o => o.createdAt && (now - new Date(o.createdAt).getTime()) <= twoWeeks).length;
-      const month = delivered.filter(o => o.createdAt && (now - new Date(o.createdAt).getTime()) <= oneMonth).length;
-      const total = delivered.length;
-      res.json({ week, twoWeek, month, total });
+      const endWeek = startMs + oneWeek;
+      const endTwoWeek = startMs + twoWeeks;
+      const endMonth = startMs + oneMonth;
+
+      const week = filtered.filter(o => o.createdAt && new Date(o.createdAt).getTime() <= endWeek).length;
+      const twoWeek = filtered.filter(o => o.createdAt && new Date(o.createdAt).getTime() <= endTwoWeek).length;
+      const month = filtered.filter(o => o.createdAt && new Date(o.createdAt).getTime() <= endMonth).length;
+      const total = filtered.length;
+
+      const byDay: Record<string, number> = {};
+      for (const o of filtered) {
+        if (o.createdAt) {
+          const day = new Date(o.createdAt).toISOString().slice(0, 10);
+          byDay[day] = (byDay[day] || 0) + 1;
+        }
+      }
+
+      res.json({ week, twoWeek, month, total, byDay });
     } catch (err) {
       console.error("Staff delivery stats error:", err);
       res.status(500).json({ message: "Internal server error" });
