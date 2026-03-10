@@ -515,6 +515,22 @@ export async function registerRoutes(
     res.json(allOrders);
   });
 
+  app.get('/api/staff/delivery-history', requireAuth, requireRole("staff"), async (req, res) => {
+    try {
+      const staffOrders = await storage.getOrdersByStaffId(req.user!.id);
+      const delivered = staffOrders.filter(o => o.status === "delivered");
+      delivered.sort((a, b) => {
+        const da = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const db = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+        return db - da;
+      });
+      res.json(delivered);
+    } catch (err) {
+      console.error("Staff delivery history error:", err);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
   app.get('/api/staff/delivery-stats', requireAuth, requireRole("staff"), async (req, res) => {
     try {
       const staffOrders = await storage.getOrdersByStaffId(req.user!.id);

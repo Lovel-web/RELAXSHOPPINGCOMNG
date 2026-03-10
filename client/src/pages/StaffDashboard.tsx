@@ -8,13 +8,13 @@ import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Package, Clock, CreditCard, Truck, Loader2, CheckCircle, Receipt, Lock, Unlock, Copy, MessageCircle, MapPin, BarChart3, CalendarIcon } from "lucide-react";
+import { Package, Clock, CreditCard, Truck, Loader2, CheckCircle, Receipt, Lock, Unlock, Copy, MessageCircle, MapPin, BarChart3, CalendarIcon, History } from "lucide-react";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { type Order, type OrderItem, type Product, type State, type Lga, type Estate } from "@shared/schema";
 import { Link } from "wouter";
 
-type TabId = "batch" | "vendor" | "delivery" | "whatsapp" | "stats";
+type TabId = "batch" | "vendor" | "delivery" | "whatsapp" | "stats" | "history";
 
 interface EnrichedItem extends OrderItem {
   product: Product;
@@ -65,6 +65,15 @@ export default function StaffDashboard() {
       return await res.json();
     },
     enabled: tab === "stats",
+  });
+
+  const { data: historyOrders, isLoading: historyLoading } = useQuery<Order[]>({
+    queryKey: ['/api/staff/delivery-history'],
+    queryFn: async () => {
+      const res = await apiRequest("GET", "/api/staff/delivery-history");
+      return await res.json();
+    },
+    enabled: tab === "history",
   });
 
   const getStatsEndLabel = () => {
@@ -268,6 +277,7 @@ export default function StaffDashboard() {
     { id: "vendor", label: "Vendor Pickup", icon: CreditCard, count: Object.keys(vendorGroups).length },
     { id: "delivery", label: "Delivery", icon: Truck, count: readyOrders.length },
     { id: "whatsapp", label: "WhatsApp", icon: MessageCircle },
+    { id: "history", label: "History", icon: History },
     { id: "stats", label: "Stats", icon: BarChart3 },
   ];
 
@@ -545,6 +555,71 @@ export default function StaffDashboard() {
                 <Copy className="w-3 h-3 mr-1" /> Copy
               </Button>
             </div>
+          </div>
+        )}
+
+        {tab === "history" && (
+          <div className="space-y-4" data-testid="section-delivery-history">
+            <h2 className="font-semibold text-lg">Delivery History</h2>
+            {historyLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+              </div>
+            ) : !historyOrders || historyOrders.length === 0 ? (
+              <div className="text-center py-16">
+                <History className="w-12 h-12 mx-auto mb-3 text-muted-foreground/30" />
+                <p className="text-muted-foreground">No deliveries yet</p>
+              </div>
+            ) : (() => {
+              const grouped: Record<string, Record<string, Order[]>> = {};
+              for (const o of historyOrders) {
+                const dayKey = o.createdAt
+                  ? new Date(o.createdAt).toLocaleDateString("en-NG", { weekday: "short", day: "numeric", month: "short", year: "numeric" })
+                  : "Unknown Date";
+                const batchKey = o.batchTime || "No Batch";
+                if (!grouped[dayKey]) grouped[dayKey] = {};
+                if (!grouped[dayKey][batchKey]) grouped[dayKey][batchKey] = [];
+                grouped[dayKey][batchKey].push(o);
+              }
+              return Object.entries(grouped).map(([day, batches]) => {
+                const dayTotal = Object.values(batches).flat().length;
+                return (
+                  <div key={day} className="bg-white dark:bg-card rounded-xl border border-border/50 overflow-hidden">
+                    <div className="bg-primary/5 px-4 py-3 flex items-center justify-between border-b border-border/30">
+                      <div className="flex items-center gap-2">
+                        <CalendarIcon className="w-4 h-4 text-primary" />
+                        <span className="font-semibold text-sm">{day}</span>
+                      </div>
+                      <Badge variant="secondary" className="text-xs">{dayTotal} {dayTotal === 1 ? "order" : "orders"}</Badge>
+                    </div>
+                    <div className="divide-y divide-border/30">
+                      {Object.entries(batches).map(([batch, batchOrders]) => (
+                        <div key={batch} className="p-4">
+                          <div className="flex items-center gap-2 mb-2">
+                            <Clock className="w-3 h-3 text-muted-foreground" />
+                            <span className="text-xs font-medium text-muted-foreground uppercase">{batch} Batch</span>
+                            <Badge variant="outline" className="text-xs">{batchOrders.length}</Badge>
+                          </div>
+                          <div className="space-y-2">
+                            {batchOrders.map((order) => (
+                              <div key={order.id} className="flex items-center justify-between py-1" data-testid={`history-order-${order.id}`}>
+                                <div>
+                                  <span className="font-bold text-primary text-sm">{order.orderCode}</span>
+                                  <span className="text-xs text-muted-foreground ml-2">
+                                    {getEstateName(order.estateId)}
+                                  </span>
+                                </div>
+                                <span className="font-semibold text-sm">₦{(order.totalAmount - order.deliveryFee).toLocaleString()}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              });
+            })()}
           </div>
         )}
 
