@@ -357,7 +357,7 @@ export default function StaffDashboard() {
                           className={`bg-white rounded-xl border p-4 ${selectedIds.has(order.id) ? "border-primary bg-primary/5" : "border-border/50"}`}
                           data-testid={`card-order-${order.id}`}
                         >
-                          <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center justify-between mb-1">
                             <div className="flex items-center gap-2">
                               <span className="font-bold text-primary" data-testid={`text-order-code-${order.id}`}>{order.orderCode}</span>
                               <Badge variant={order.status === "accepted" ? "default" : "outline"} className="text-xs">
@@ -366,6 +366,11 @@ export default function StaffDashboard() {
                             </div>
                             <span className="font-bold">₦{(order.totalAmount - order.deliveryFee).toLocaleString()}</span>
                           </div>
+                          {order.createdAt && (
+                            <p className="text-xs text-muted-foreground mb-2" data-testid={`text-order-date-${order.id}`}>
+                              {new Date(order.createdAt).toLocaleDateString("en-NG", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}
+                            </p>
+                          )}
 
                           {oItems.length > 0 && (
                             <div className="text-sm space-y-1 mb-3">
@@ -474,10 +479,15 @@ export default function StaffDashboard() {
                   <div className="space-y-3">
                     {eOrders.map((order) => (
                       <div key={order.id} className="bg-white rounded-xl border border-border/50 p-4" data-testid={`delivery-order-${order.id}`}>
-                        <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center justify-between mb-1">
                           <span className="font-bold text-primary">{order.orderCode}</span>
                           <span className="font-bold">₦{order.totalAmount.toLocaleString()}</span>
                         </div>
+                        {order.createdAt && (
+                          <p className="text-xs text-muted-foreground mb-2">
+                            {new Date(order.createdAt).toLocaleDateString("en-NG", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}
+                          </p>
+                        )}
                         <Button
                           size="sm"
                           onClick={() => handleMarkDelivered(order.id)}

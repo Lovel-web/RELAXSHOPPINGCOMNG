@@ -38,6 +38,7 @@ export const users = pgTable("users", {
   accountNumber: text("account_number"),
   paystackRecipientCode: text("paystack_recipient_code"),
   accountNameVerified: text("account_name_verified"),
+  createdAt: timestamp("created_at").defaultNow(),
 });
 
 export const products = pgTable("products", {
@@ -116,7 +117,7 @@ export const settings = pgTable("settings", {
   value: text("value").notNull(),
 });
 
-export const insertUserSchema = createInsertSchema(users).omit({ id: true });
+export const insertUserSchema = createInsertSchema(users).omit({ id: true, createdAt: true });
 export const insertProductSchema = createInsertSchema(products).omit({ id: true });
 export const insertOrderSchema = createInsertSchema(orders).omit({ id: true, createdAt: true });
 export const insertCheckoutSessionSchema = createInsertSchema(checkoutSessions).omit({ id: true, createdAt: true });
