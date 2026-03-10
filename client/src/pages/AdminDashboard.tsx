@@ -100,6 +100,11 @@ export default function AdminDashboard() {
                   <div>
                     <span className="font-bold text-primary">{order.orderCode}</span>
                     <p className="text-sm text-muted-foreground">₦{order.totalAmount.toLocaleString()}</p>
+                    {order.createdAt && (
+                      <p className="text-xs text-muted-foreground">
+                        {new Date(order.createdAt).toLocaleDateString("en-NG", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}
+                      </p>
+                    )}
                   </div>
                   <Badge variant={order.status === "delivered" ? "default" : order.status === "paid" ? "secondary" : "outline"}>
                     {order.status.replace(/_/g, " ")}
@@ -120,6 +125,11 @@ export default function AdminDashboard() {
                   <div>
                     <span className="font-bold text-primary">{order.orderCode}</span>
                     <p className="text-sm text-muted-foreground">₦{order.totalAmount.toLocaleString()}</p>
+                    {order.createdAt && (
+                      <p className="text-xs text-muted-foreground">
+                        {new Date(order.createdAt).toLocaleDateString("en-NG", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}
+                      </p>
+                    )}
                   </div>
                   <Badge variant={order.status === "delivered" ? "default" : order.status === "paid" ? "secondary" : "outline"}>
                     {order.status.replace(/_/g, " ")}
@@ -240,6 +250,9 @@ function UsersPanel({ pendingUsers, usersList, approveUser }: {
                 <div>
                   <span className="font-semibold">{u.name}</span>
                   <p className="text-sm text-muted-foreground">{u.email || u.phone} &middot; {u.role}</p>
+                  {u.createdAt && (
+                    <p className="text-xs text-muted-foreground">Registered: {new Date(u.createdAt).toLocaleDateString("en-NG", { day: "numeric", month: "short", year: "numeric" })}</p>
+                  )}
                   {u.accountNameVerified && (
                     <Badge variant="outline" className="text-xs mt-1">Bank: {u.accountNameVerified}</Badge>
                   )}
@@ -279,6 +292,9 @@ function UsersPanel({ pendingUsers, usersList, approveUser }: {
                   <Badge variant="outline" className="text-xs shrink-0">{u.role}</Badge>
                 </div>
                 <p className="text-sm text-muted-foreground truncate">{u.email || u.phone}</p>
+                {u.createdAt && (
+                  <p className="text-xs text-muted-foreground">Joined: {new Date(u.createdAt).toLocaleDateString("en-NG", { day: "numeric", month: "short", year: "numeric" })}</p>
+                )}
               </div>
               <div className="flex items-center gap-1 shrink-0 ml-2">
                 <Badge variant={u.approved ? "default" : "destructive"} className="text-xs">
@@ -425,6 +441,14 @@ function UserDetailView({ userId, onBack }: { userId: number; onBack: () => void
               {user.approved ? "Active" : "Blocked"}
             </Badge>
           </div>
+          {user.createdAt && (
+            <div>
+              <p className="text-muted-foreground">Registered</p>
+              <p className="font-medium" data-testid="text-user-registered">
+                {new Date(user.createdAt).toLocaleDateString("en-NG", { day: "numeric", month: "short", year: "numeric" })}
+              </p>
+            </div>
+          )}
           {user.bankName && (
             <>
               <div>
@@ -505,6 +529,11 @@ function UserDetailView({ userId, onBack }: { userId: number; onBack: () => void
                 <div>
                   <span className="font-bold text-primary text-sm">{o.orderCode}</span>
                   <p className="text-xs text-muted-foreground">₦{o.totalAmount.toLocaleString()}</p>
+                  {o.createdAt && (
+                    <p className="text-xs text-muted-foreground">
+                      {new Date(o.createdAt).toLocaleDateString("en-NG", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}
+                    </p>
+                  )}
                 </div>
                 <Badge variant={o.status === "delivered" ? "default" : "outline"} className="text-xs">
                   {o.status.replace(/_/g, " ")}
