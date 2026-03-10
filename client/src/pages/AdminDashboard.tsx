@@ -251,7 +251,7 @@ function UsersPanel({ pendingUsers, usersList, approveUser }: {
                   <span className="font-semibold">{u.name}</span>
                   <p className="text-sm text-muted-foreground">{u.email || u.phone} &middot; {u.role}</p>
                   {u.createdAt && (
-                    <p className="text-xs text-muted-foreground">Registered: {new Date(u.createdAt).toLocaleDateString("en-NG", { day: "numeric", month: "short", year: "numeric" })}</p>
+                    <p className="text-xs text-muted-foreground">Registered: {new Date(u.createdAt).toLocaleDateString("en-NG", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}</p>
                   )}
                   {u.accountNameVerified && (
                     <Badge variant="outline" className="text-xs mt-1">Bank: {u.accountNameVerified}</Badge>
@@ -293,7 +293,7 @@ function UsersPanel({ pendingUsers, usersList, approveUser }: {
                 </div>
                 <p className="text-sm text-muted-foreground truncate">{u.email || u.phone}</p>
                 {u.createdAt && (
-                  <p className="text-xs text-muted-foreground">Joined: {new Date(u.createdAt).toLocaleDateString("en-NG", { day: "numeric", month: "short", year: "numeric" })}</p>
+                  <p className="text-xs text-muted-foreground">Joined: {new Date(u.createdAt).toLocaleDateString("en-NG", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}</p>
                 )}
               </div>
               <div className="flex items-center gap-1 shrink-0 ml-2">
@@ -445,7 +445,7 @@ function UserDetailView({ userId, onBack }: { userId: number; onBack: () => void
             <div>
               <p className="text-muted-foreground">Registered</p>
               <p className="font-medium" data-testid="text-user-registered">
-                {new Date(user.createdAt).toLocaleDateString("en-NG", { day: "numeric", month: "short", year: "numeric" })}
+                {new Date(user.createdAt).toLocaleDateString("en-NG", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}
               </p>
             </div>
           )}
