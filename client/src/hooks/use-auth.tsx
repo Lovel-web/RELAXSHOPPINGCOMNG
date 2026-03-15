@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState, useCallback, type ReactNode } from "react";
-import { supabase } from "@/lib/supabase";
+import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import type { User } from "@shared/schema";
 import type { Session } from "@supabase/supabase-js";
 
@@ -21,6 +21,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   const fetchProfile = useCallback(async (_supabaseId?: string) => {
+    if (!isSupabaseConfigured) return;
     try {
       const { data: { session: s } } = await supabase.auth.getSession();
       if (!s?.access_token) {
@@ -49,6 +50,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [session, fetchProfile]);
 
   useEffect(() => {
+    if (!isSupabaseConfigured) {
+      setLoading(false);
+      return;
+    }
+
     supabase.auth.getSession().then(({ data: { session: s } }) => {
       setSession(s);
       if (s?.user?.id) {
@@ -71,6 +77,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [fetchProfile]);
 
   const signUp = async (email: string, password: string, profile: { name: string; phone: string; role: string; stateId?: number; lgaId?: number; bankName?: string; accountNumber?: string }) => {
+    if (!isSupabaseConfigured) return { error: "Authentication is not configured. Please set up Supabase environment variables." };
     const { data, error } = await supabase.auth.signUp({ email, password });
     if (error) return { error: error.message };
     if (!data.user) return { error: "Signup failed" };
@@ -97,6 +104,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const signIn = async (email: string, password: string) => {
+    if (!isSupabaseConfigured) return { error: "Authentication is not configured. Please set up Supabase environment variables." };
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) return { error: error.message };
     if (!data.user) return { error: "Login failed" };
@@ -106,7 +114,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const signOut = async () => {
-    await supabase.auth.signOut();
+    if (isSupabaseConfigured) {
+      await supabase.auth.signOut();
+    }
     setSession(null);
     setUser(null);
   };
