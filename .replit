@@ -33,3 +33,13 @@ outputType = "webview"
 [[ports]]
 localPort = 5000
 externalPort = 80
+
+[userenv]
+
+[userenv.shared]
+VITE_PAYSTACK_PUBLIC_KEY = "pk_test_ab409984ed6f49af11cbc17dd5e30c7fca00df6a"
+PAYSTACK_SECRET_KEY = "sk_test_cb6c5970e3a67454307f1dfdfd2cb64a3dbe3259"
+PAYSTACK_WEBHOOK_SECRET = "sk_test_cb6c5970e3a67454307f1dfdfd2cb64a3dbe3259"
+VITE_SUPABASE_URL = "https://kxpwdrwhgunqkirlnqgz.supabase.co"
+VITE_SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imt4cHdkcndoZ3VucWtpcmxucWd6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE5NzY3NTYsImV4cCI6MjA4NzU1Mjc1Nn0.N3IfJtFA3OFbYUJk4JnO3mnx0jJSeGVM5fIvq04gtr4"
+SUPABASE_SERVICE_ROLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imt4cHdkcndoZ3VucWtpcmxucWd6Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTk3Njc1NiwiZXhwIjoyMDg3NTUyNzU2fQ.SwFgvZt63S3-x9VkXyB-vm6EKABQlq10IKUqcn4E7dU"
