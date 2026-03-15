@@ -23,6 +23,8 @@ import Landing from "@/pages/Landing";
 import JoinCustomer from "@/pages/JoinCustomer";
 import ForgotPassword from "@/pages/ForgotPassword";
 import ResetPassword from "@/pages/ResetPassword";
+import PrivacyPolicy from "@/pages/PrivacyPolicy";
+import TermsAndConditions from "@/pages/TermsAndConditions";
 
 function Router() {
   return (
@@ -41,6 +43,8 @@ function Router() {
       <Route path="/vendor-signup" component={VendorSignup} />
       <Route path="/staff-signup" component={StaffSignup} />
       <Route path="/pending-approval" component={PendingApproval} />
+      <Route path="/privacy-policy" component={PrivacyPolicy} />
+      <Route path="/terms-and-conditions" component={TermsAndConditions} />
       <Route path="/vendor-dashboard">
         <ProtectedRoute allowedRoles={["vendor"]}>
           <VendorDashboard />
