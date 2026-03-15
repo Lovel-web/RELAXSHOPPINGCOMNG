@@ -1,0 +1,196 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* RelaxShopping Design System - Calm, Warm Theme
+   "Scheduled delivery. Calm shopping."
+   Colors: Warm cream, muted greens, soft browns, gentle grays
+   No neon. Spacious. Peaceful.
+*/
+
+@layer base {
+  :root {
+    /* RelaxShopping Calm Theme */
+    --background: 40 30% 96%; /* Warm cream */
+    --foreground: 30 10% 20%;
+
+    --card: 40 20% 99%;
+    --card-foreground: 30 10% 20%;
+
+    --popover: 40 20% 99%;
+    --popover-foreground: 30 10% 20%;
+
+    /* Muted sage green primary */
+    --primary: 140 25% 45%;
+    --primary-foreground: 0 0% 100%;
+
+    /* Soft brown secondary */
+    --secondary: 30 20% 50%;
+    --secondary-foreground: 0 0% 100%;
+
+    /* Warm beige accent */
+    --accent: 35 40% 88%;
+    --accent-foreground: 30 10% 20%;
+
+    --muted: 40 15% 92%;
+    --muted-foreground: 30 10% 45%;
+
+    --destructive: 0 65% 55%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 40 15% 88%;
+    --input: 40 15% 88%;
+    --ring: 140 25% 45%;
+
+    --radius: 0.75rem;
+
+    /* Success color */
+    --success: 142 50% 40%;
+    --success-foreground: 0 0% 100%;
+
+    /* Warning color */
+    --warning: 38 92% 50%;
+    --warning-foreground: 0 0% 100%;
+
+    /* Calm shadows */
+    --shadow-soft: 0 4px 20px -4px hsla(30, 20%, 20%, 0.08);
+    --shadow-card: 0 2px 12px -2px hsla(30, 20%, 20%, 0.06);
+    
+    /* Smooth transitions */
+    --transition-calm: all 0.4s cubic-bezier(0.25, 0.1, 0.25, 1);
+  }
+
+  .dark {
+    --background: 30 15% 10%;
+    --foreground: 40 20% 92%;
+
+    --card: 30 12% 14%;
+    --card-foreground: 40 20% 92%;
+
+    --popover: 30 12% 14%;
+    --popover-foreground: 40 20% 92%;
+
+    --primary: 140 30% 50%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 30 25% 45%;
+    --secondary-foreground: 0 0% 100%;
+
+    --accent: 35 20% 25%;
+    --accent-foreground: 40 20% 92%;
+
+    --muted: 30 12% 18%;
+    --muted-foreground: 40 10% 55%;
+
+    --destructive: 0 62% 50%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 30 12% 22%;
+    --input: 30 12% 22%;
+    --ring: 140 30% 50%;
+
+    --success: 142 50% 45%;
+    --success-foreground: 0 0% 100%;
+
+    --warning: 38 90% 55%;
+    --warning-foreground: 0 0% 100%;
+
+    --shadow-soft: 0 4px 20px -4px hsla(0, 0%, 0%, 0.3);
+    --shadow-card: 0 2px 12px -2px hsla(0, 0%, 0%, 0.2);
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    background: hsl(var(--background));
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+}
+
+@layer utilities {
+  /* Calm card styles */
+  .card-calm {
+    @apply bg-card rounded-xl border border-border/50;
+    box-shadow: var(--shadow-card);
+  }
+  
+  .card-elevated {
+    @apply bg-card rounded-xl border border-border/50;
+    box-shadow: var(--shadow-soft);
+  }
+  
+  /* Smooth hover effect */
+  .hover-calm {
+    transition: var(--transition-calm);
+  }
+  
+  .hover-calm:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-soft);
+  }
+  
+  /* Subtle text gradient for headings */
+  .text-calm-gradient {
+    background: linear-gradient(135deg, hsl(var(--foreground)), hsl(var(--muted-foreground)));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  
+  /* Primary gradient - subtle */
+  .gradient-primary-calm {
+    background: linear-gradient(135deg, hsl(var(--primary)), hsl(140, 30%, 40%));
+  }
+  
+  /* Status badge styles */
+  .badge-pending {
+    @apply bg-warning/10 text-warning border-warning/20;
+  }
+  
+  .badge-success {
+    @apply bg-success/10 text-success border-success/20;
+  }
+  
+  .badge-processing {
+    @apply bg-primary/10 text-primary border-primary/20;
+  }
+  
+  /* Timeline connector */
+  .timeline-connector {
+    @apply w-0.5 bg-border mx-auto;
+  }
+  
+  /* Calm animations - slow and intentional */
+  .animate-fade-in-calm {
+    animation: fadeInCalm 0.6s cubic-bezier(0.25, 0.1, 0.25, 1) forwards;
+  }
+  
+  .animate-slide-up-calm {
+    animation: slideUpCalm 0.5s cubic-bezier(0.25, 0.1, 0.25, 1) forwards;
+  }
+  
+  @keyframes fadeInCalm {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+  
+  @keyframes slideUpCalm {
+    from {
+      opacity: 0;
+      transform: translateY(12px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+}
