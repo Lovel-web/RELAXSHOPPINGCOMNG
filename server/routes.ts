@@ -906,7 +906,7 @@ export async function registerRoutes(
 
   app.post('/api/vendor-payout', requireAuth, requireRole("staff"), async (req, res) => {
     try {
-      const { orderIds } = req.body;
+      const { orderIds, vendorId } = req.body;
       if (!orderIds || !Array.isArray(orderIds) || orderIds.length === 0) {
         return res.status(400).json({ message: "orderIds required" });
       }
@@ -934,14 +934,23 @@ export async function registerRoutes(
       try {
         await client.query('BEGIN');
 
-        const itemsResult = await client.query(
-          `SELECT oi.*, p.vendor_id, p.name as product_name
-           FROM order_items oi
-           JOIN products p ON p.id = oi.product_id
-           WHERE oi.order_id = ANY($1) AND oi.vendor_paid = false
-           FOR UPDATE OF oi`,
-          [orderIds]
-        );
+        const itemsResult = vendorId
+          ? await client.query(
+              `SELECT oi.*, p.vendor_id, p.name as product_name
+               FROM order_items oi
+               JOIN products p ON p.id = oi.product_id
+               WHERE oi.order_id = ANY($1) AND oi.vendor_paid = false AND p.vendor_id = $2
+               FOR UPDATE OF oi`,
+              [orderIds, vendorId]
+            )
+          : await client.query(
+              `SELECT oi.*, p.vendor_id, p.name as product_name
+               FROM order_items oi
+               JOIN products p ON p.id = oi.product_id
+               WHERE oi.order_id = ANY($1) AND oi.vendor_paid = false
+               FOR UPDATE OF oi`,
+              [orderIds]
+            );
 
         if (itemsResult.rows.length === 0) {
           await client.query('ROLLBACK');

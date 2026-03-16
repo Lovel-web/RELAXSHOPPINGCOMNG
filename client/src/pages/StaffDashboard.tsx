@@ -54,6 +54,8 @@ export default function StaffDashboard() {
   const [totalPayout, setTotalPayout] = useState(0);
   const [paymentResults, setPaymentResults] = useState<any[]>([]);
   const [showReceipts, setShowReceipts] = useState(false);
+  const [currentVendorIndex, setCurrentVendorIndex] = useState(0);
+  const [paidVendors, setPaidVendors] = useState<any[]>([]);
   const [statsFrom, setStatsFrom] = useState<Date>(new Date());
   const [statsPeriod, setStatsPeriod] = useState<"week" | "twoWeek" | "month">("week");
 
@@ -188,6 +190,8 @@ export default function StaffDashboard() {
       const data = await res.json();
       setBreakdown(data.breakdown || []);
       setTotalPayout(data.totalPayout || 0);
+      setCurrentVendorIndex(0);
+      setPaidVendors([]);
       setShowPaySummary(true);
     } catch {
       toast({ title: "Error", description: "Could not load payout preview", variant: "destructive" });
@@ -195,22 +199,36 @@ export default function StaffDashboard() {
     setLoadingPreview(false);
   };
 
-  const handlePay = async () => {
+  const handlePayCurrentVendor = async () => {
+    const currentVendor = breakdown[currentVendorIndex];
+    if (!currentVendor) return;
     setPaying(true);
     try {
-      const res = await apiRequest("POST", "/api/vendor-payout", { orderIds: Array.from(selectedIds) });
+      const res = await apiRequest("POST", "/api/vendor-payout", {
+        orderIds: Array.from(selectedIds),
+        vendorId: currentVendor.vendorId,
+      });
       const data = await res.json();
-      setPaymentResults(data.payments || []);
-      setShowReceipts(true);
-      setShowPaySummary(false);
-      toast({ title: "Vendor payment complete", description: `${data.ordersProcessed} orders settled.` });
-      queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/orders/items-bulk"] });
+      const result = data.payments?.[0] || { vendorId: currentVendor.vendorId, vendorName: currentVendor.vendorName, amount: currentVendor.amount, transferReference: "—" };
+      const newPaid = [...paidVendors, result];
+      setPaidVendors(newPaid);
+      toast({ title: `Paid ${currentVendor.vendorName}`, description: `₦${currentVendor.amount.toLocaleString()} settled.` });
+
+      const nextIndex = currentVendorIndex + 1;
+      if (nextIndex >= breakdown.length) {
+        setPaymentResults(newPaid);
+        setShowReceipts(true);
+        setShowPaySummary(false);
+        setSelectedIds(new Set());
+        queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/orders/items-bulk"] });
+      } else {
+        setCurrentVendorIndex(nextIndex);
+      }
     } catch {
-      toast({ title: "Payment failed", description: "Could not process vendor payout", variant: "destructive" });
+      toast({ title: "Payment failed", description: `Could not pay ${currentVendor.vendorName}. Try again.`, variant: "destructive" });
     }
     setPaying(false);
-    setSelectedIds(new Set());
   };
 
   const maskAccount = (acc: string) => acc && acc.length > 4 ? "****" + acc.slice(-4) : acc || "N/A";
@@ -711,66 +729,88 @@ export default function StaffDashboard() {
           </div>
         )}
 
-        {showPaySummary && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4 max-h-[90vh] overflow-y-auto">
-              <h2 className="text-xl font-bold">Vendor Settlement Summary</h2>
-              <p className="text-sm text-muted-foreground">
-                Item-level breakdown of payments to each vendor.
-              </p>
+        {showPaySummary && breakdown.length > 0 && (() => {
+          const currentVendor = breakdown[currentVendorIndex];
+          const totalVendors = breakdown.length;
+          return (
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+              <div className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4 max-h-[90vh] overflow-y-auto">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-xl font-bold">Vendor Settlement</h2>
+                  <span className="text-xs font-semibold bg-primary/10 text-primary px-3 py-1 rounded-full">
+                    {currentVendorIndex + 1} of {totalVendors}
+                  </span>
+                </div>
 
-              <div className="space-y-3">
-                {breakdown.map((vendor: any) => (
-                  <div key={vendor.vendorId} className="bg-secondary/30 rounded-xl p-4 space-y-2" data-testid={`vendor-breakdown-${vendor.vendorId}`}>
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <p className="font-semibold">{vendor.vendorName}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {vendor.accountNameVerified || vendor.bankName} &middot; {maskAccount(vendor.accountNumber)}
-                        </p>
-                        {vendor.recipientCode && (
-                          <Badge variant="outline" className="text-xs mt-1">Verified</Badge>
-                        )}
+                <p className="text-sm text-muted-foreground">
+                  Pay each vendor one at a time. Confirm each payment before moving to the next.
+                </p>
+
+                {paidVendors.length > 0 && (
+                  <div className="space-y-1.5">
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Already Paid</p>
+                    {paidVendors.map((v: any, i: number) => (
+                      <div key={i} className="flex items-center justify-between bg-green-50 border border-green-100 rounded-lg px-3 py-2">
+                        <div className="flex items-center gap-2">
+                          <CheckCircle className="w-4 h-4 text-green-600 flex-shrink-0" />
+                          <span className="text-sm font-medium text-green-800">{v.vendorName}</span>
+                        </div>
+                        <span className="text-sm font-bold text-green-700">₦{v.amount.toLocaleString()}</span>
                       </div>
-                      <span className="font-bold text-primary">₦{vendor.amount.toLocaleString()}</span>
-                    </div>
-                    {vendor.items && (
-                      <div className="text-xs space-y-1 text-muted-foreground">
-                        {vendor.items.map((it: any, idx: number) => (
-                          <div key={idx} className="flex justify-between">
-                            <span>{it.productName} x{it.qty}</span>
-                            <span>₦{(it.unitCost * it.qty).toLocaleString()}</span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
+                    ))}
                   </div>
-                ))}
-              </div>
+                )}
 
-              <div className="bg-primary/5 rounded-xl p-4">
-                <div className="flex justify-between font-bold text-lg">
-                  <span>Total Vendor Payout</span>
-                  <span className="text-primary">₦{totalPayout.toLocaleString()}</span>
+                <div className="border-2 border-primary/20 rounded-xl p-4 space-y-3 bg-primary/5" data-testid={`vendor-breakdown-${currentVendor.vendorId}`}>
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <p className="font-bold text-base">{currentVendor.vendorName}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {currentVendor.accountNameVerified || currentVendor.bankName} &middot; {maskAccount(currentVendor.accountNumber)}
+                      </p>
+                      {currentVendor.recipientCode && (
+                        <Badge variant="outline" className="text-xs mt-1">Verified ✓</Badge>
+                      )}
+                    </div>
+                    <span className="font-bold text-primary text-lg">₦{currentVendor.amount.toLocaleString()}</span>
+                  </div>
+                  {currentVendor.items && (
+                    <div className="border-t border-primary/10 pt-3 text-xs space-y-1.5 text-muted-foreground">
+                      <p className="font-semibold text-foreground mb-1">Items</p>
+                      {currentVendor.items.map((it: any, idx: number) => (
+                        <div key={idx} className="flex justify-between">
+                          <span>{it.productName} × {it.qty}</span>
+                          <span className="font-medium">₦{(it.unitCost * it.qty).toLocaleString()}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div className="bg-primary/5 rounded-xl px-4 py-3 flex justify-between text-sm">
+                  <span className="text-muted-foreground">Remaining after this</span>
+                  <span className="font-bold text-primary">
+                    ₦{(totalPayout - paidVendors.reduce((s: number, v: any) => s + v.amount, 0) - currentVendor.amount).toLocaleString()}
+                  </span>
+                </div>
+
+                <p className="text-xs text-muted-foreground bg-yellow-50 rounded-lg p-3">
+                  Row-locked to prevent duplicate payments. Each vendor is paid independently.
+                </p>
+
+                <div className="flex gap-3">
+                  <Button variant="outline" className="flex-1" onClick={() => { setShowPaySummary(false); setPaidVendors([]); setCurrentVendorIndex(0); }} data-testid="button-cancel-pay">
+                    Cancel
+                  </Button>
+                  <Button className="flex-1" onClick={handlePayCurrentVendor} disabled={paying} data-testid="button-confirm-pay">
+                    {paying ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <CreditCard className="w-4 h-4 mr-2" />}
+                    Pay {currentVendor.vendorName}
+                  </Button>
                 </div>
               </div>
-
-              <p className="text-xs text-muted-foreground bg-yellow-50 rounded-lg p-3">
-                Payment amounts calculated from verified order data. Row-locked to prevent duplicate payments.
-              </p>
-
-              <div className="flex gap-3">
-                <Button variant="outline" className="flex-1" onClick={() => setShowPaySummary(false)} data-testid="button-cancel-pay">
-                  Cancel
-                </Button>
-                <Button className="flex-1" onClick={handlePay} disabled={paying} data-testid="button-confirm-pay">
-                  {paying ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <CheckCircle className="w-4 h-4 mr-2" />}
-                  Confirm & Pay
-                </Button>
-              </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
 
         {showReceipts && paymentResults.length > 0 && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">

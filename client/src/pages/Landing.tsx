@@ -373,7 +373,7 @@ function Footer() {
             <div className="space-y-2 text-sm">
               <div className="flex items-center gap-2">
                 <Mail className="h-4 w-4 text-[#4caf50]" />
-                <a href="mailto:rellaxshopping@gmail.com" className="hover:text-white transition-colors">rellaxshopping@gmail.com</a>
+                <a href="mailto:relaxxshopping@gmail.com" className="hover:text-white transition-colors">relaxxshopping@gmail.com</a>
               </div>
               <div className="flex items-center gap-2">
                 <Phone className="h-4 w-4 text-[#4caf50]" />
@@ -405,7 +405,7 @@ function Footer() {
               <li><a href="#" className="hover:text-white transition-colors">About Us</a></li>
               <li><a href="#" className="hover:text-white transition-colors">Our Mission</a></li>
               <li><a href="#" className="hover:text-white transition-colors">Blog</a></li>
-              <li><a href="mailto:rellaxshopping@gmail.com" className="hover:text-white transition-colors">Contact</a></li>
+              <li><a href="mailto:relaxxshopping@gmail.com" className="hover:text-white transition-colors">Contact</a></li>
             </ul>
           </div>
 
