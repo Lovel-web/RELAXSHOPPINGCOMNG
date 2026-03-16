@@ -102,7 +102,7 @@ export default function TermsAndConditions() {
                 In the event of a dispute between a customer and vendor, both parties are encouraged to first attempt to resolve the matter directly. If resolution cannot be reached:
               </p>
               <ul className="list-disc pl-5 space-y-2 mt-3 text-sm leading-relaxed">
-                <li>Either party may escalate the dispute to RelaxShopping support via email at <a href="mailto:rellaxshopping@gmail.com" className="text-[#2d7a2d] hover:underline">rellaxshopping@gmail.com</a>.</li>
+                <li>Either party may escalate the dispute to RelaxShopping support via email at <a href="mailto:relaxxshopping@gmail.com" className="text-[#2d7a2d] hover:underline">relaxxshopping@gmail.com</a>.</li>
                 <li>RelaxShopping will act as a neutral mediator and will review transaction records, order history, and communications to make a fair determination.</li>
                 <li>RelaxShopping's decision in disputes is final and binding on both parties.</li>
                 <li>Any legal claims arising from use of the Platform shall be governed by the laws of the Federal Republic of Nigeria.</li>
@@ -147,7 +147,7 @@ export default function TermsAndConditions() {
               <h2 className="text-xl font-bold text-gray-900 mb-3">10. Contact</h2>
               <p className="leading-relaxed">For questions about these Terms & Conditions, please contact:</p>
               <div className="mt-3 bg-gray-50 rounded-xl p-4 space-y-1 text-sm">
-                <p><strong>Email:</strong> <a href="mailto:rellaxshopping@gmail.com" className="text-[#2d7a2d] hover:underline">rellaxshopping@gmail.com</a></p>
+                <p><strong>Email:</strong> <a href="mailto:relaxxshopping@gmail.com" className="text-[#2d7a2d] hover:underline">relaxxshopping@gmail.com</a></p>
                 <p><strong>Phone:</strong> <a href="tel:+2347071175566" className="text-[#2d7a2d] hover:underline">+234 707 117 5566</a></p>
               </div>
             </section>

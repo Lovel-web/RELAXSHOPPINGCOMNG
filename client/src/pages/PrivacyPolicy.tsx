@@ -152,7 +152,7 @@ export default function PrivacyPolicy() {
                 If you have any questions about this Privacy Policy or how your data is handled, please contact us:
               </p>
               <div className="mt-3 bg-gray-50 rounded-xl p-4 space-y-1 text-sm">
-                <p><strong>Email:</strong> <a href="mailto:rellaxshopping@gmail.com" className="text-[#2d7a2d] hover:underline">rellaxshopping@gmail.com</a></p>
+                <p><strong>Email:</strong> <a href="mailto:relaxxshopping@gmail.com" className="text-[#2d7a2d] hover:underline">relaxxshopping@gmail.com</a></p>
                 <p><strong>Phone:</strong> <a href="tel:+2347071175566" className="text-[#2d7a2d] hover:underline">+234 707 117 5566</a></p>
               </div>
             </section>
