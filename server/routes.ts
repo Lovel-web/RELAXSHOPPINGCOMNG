@@ -1419,6 +1419,7 @@ export async function registerRoutes(
       const stateLgas = await storage.getLgasAll(stateId);
       const stateOrders = await storage.getOrders();
       const ordersInState = stateOrders.filter(o => o.stateId === stateId);
+      const paidOrdersInState = ordersInState.filter(o => ['paid','ready_for_delivery','delivered'].includes(o.status));
       const deliveredInState = ordersInState.filter(o => o.status === 'delivered');
 
       let estateCount = 0;
@@ -1426,6 +1427,9 @@ export async function registerRoutes(
         const lgaEstates = await storage.getEstatesAll(lga.id);
         estateCount += lgaEstates.length;
       }
+
+      const deliveryRevenue = paidOrdersInState.reduce((sum, o) => sum + (o.deliveryFee || 400), 0);
+      const totalRevenue = paidOrdersInState.reduce((sum, o) => sum + o.totalAmount, 0);
 
       res.json({
         stateId,
@@ -1436,7 +1440,9 @@ export async function registerRoutes(
         customers: stateUsers.filter(u => u.role === 'customer').length,
         totalOrders: ordersInState.length,
         deliveredOrders: deliveredInState.length,
-        totalRevenue: ordersInState.reduce((sum, o) => sum + o.totalAmount, 0),
+        totalRevenue,
+        deliveryRevenue,
+        productRevenue: totalRevenue - deliveryRevenue,
       });
     } catch (err) {
       res.status(500).json({ message: "Failed to load state summary" });
@@ -1448,8 +1454,28 @@ export async function registerRoutes(
       const lgaId = Number(req.params.id);
       const lgaUsers = await storage.getUsersByLga(lgaId);
       const lgaEstates = await storage.getEstatesAll(lgaId);
-      const lgaOrders = (await storage.getOrders()).filter(o => o.lgaId === lgaId);
+      const allOrders = await storage.getOrders();
+      const lgaOrders = allOrders.filter(o => o.lgaId === lgaId);
+      const paidLgaOrders = lgaOrders.filter(o => ['paid','ready_for_delivery','delivered'].includes(o.status));
       const deliveredInLga = lgaOrders.filter(o => o.status === 'delivered');
+
+      const deliveryRevenue = paidLgaOrders.reduce((sum, o) => sum + (o.deliveryFee || 400), 0);
+      const totalRevenue = paidLgaOrders.reduce((sum, o) => sum + o.totalAmount, 0);
+
+      const estatesBreakdown = lgaEstates.map(estate => {
+        const estateOrders = paidLgaOrders.filter(o => o.estateId === estate.id);
+        const estDelivery = estateOrders.reduce((sum, o) => sum + (o.deliveryFee || 400), 0);
+        const estTotal = estateOrders.reduce((sum, o) => sum + o.totalAmount, 0);
+        return {
+          id: estate.id,
+          name: estate.name,
+          abbreviation: estate.abbreviation,
+          orderCount: estateOrders.length,
+          totalRevenue: estTotal,
+          deliveryRevenue: estDelivery,
+          productRevenue: estTotal - estDelivery,
+        };
+      });
 
       res.json({
         lgaId,
@@ -1459,10 +1485,35 @@ export async function registerRoutes(
         customers: lgaUsers.filter(u => u.role === 'customer').length,
         totalOrders: lgaOrders.length,
         deliveredOrders: deliveredInLga.length,
-        totalRevenue: lgaOrders.reduce((sum, o) => sum + o.totalAmount, 0),
+        totalRevenue,
+        deliveryRevenue,
+        productRevenue: totalRevenue - deliveryRevenue,
+        estatesBreakdown,
       });
     } catch (err) {
       res.status(500).json({ message: "Failed to load LGA summary" });
+    }
+  });
+
+  app.get('/api/estates/:id/summary', requireAuth, requireRole("admin"), async (req, res) => {
+    try {
+      const estateId = Number(req.params.id);
+      const allOrders = await storage.getOrders();
+      const estateOrders = allOrders.filter(o => o.estateId === estateId);
+      const paidEstateOrders = estateOrders.filter(o => ['paid','ready_for_delivery','delivered'].includes(o.status));
+      const deliveredOrders = estateOrders.filter(o => o.status === 'delivered');
+      const deliveryRevenue = paidEstateOrders.reduce((sum, o) => sum + (o.deliveryFee || 400), 0);
+      const totalRevenue = paidEstateOrders.reduce((sum, o) => sum + o.totalAmount, 0);
+      res.json({
+        estateId,
+        totalOrders: estateOrders.length,
+        deliveredOrders: deliveredOrders.length,
+        totalRevenue,
+        deliveryRevenue,
+        productRevenue: totalRevenue - deliveryRevenue,
+      });
+    } catch (err) {
+      res.status(500).json({ message: "Failed to load estate summary" });
     }
   });
 
