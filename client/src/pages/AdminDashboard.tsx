@@ -36,6 +36,8 @@ export default function AdminDashboard() {
 
   const paidOrders = allOrders.filter((o) => o.status === "paid" || o.status === "ready_for_delivery" || o.status === "delivered");
   const totalRevenue = paidOrders.reduce((acc, o) => acc + o.totalAmount, 0);
+  const deliveryRevenue = paidOrders.reduce((acc, o) => acc + ((o as any).deliveryFee || 400), 0);
+  const productRevenue = totalRevenue - deliveryRevenue;
   const deliveredOrders = allOrders.filter((o) => o.status === "delivered");
 
   const approveUser = useMutation({
@@ -53,10 +55,10 @@ export default function AdminDashboard() {
   });
 
   const stats = [
-    { label: "Total Orders", value: allOrders.length, icon: ShoppingCart, color: "text-blue-600 bg-blue-50" },
-    { label: "Revenue", value: `₦${totalRevenue.toLocaleString()}`, icon: DollarSign, color: "text-green-600 bg-green-50" },
-    { label: "Products", value: allProducts.length, icon: Package, color: "text-purple-600 bg-purple-50" },
-    { label: "Delivered", value: deliveredOrders.length, icon: CheckCircle, color: "text-emerald-600 bg-emerald-50" },
+    { label: "Total Orders", value: allOrders.length, icon: ShoppingCart, color: "text-blue-600 bg-blue-50", sub: null },
+    { label: "Total Revenue", value: `₦${totalRevenue.toLocaleString()}`, icon: DollarSign, color: "text-green-600 bg-green-50", sub: `₦${deliveryRevenue.toLocaleString()} delivery · ₦${productRevenue.toLocaleString()} products` },
+    { label: "Products", value: allProducts.length, icon: Package, color: "text-purple-600 bg-purple-50", sub: null },
+    { label: "Delivered", value: deliveredOrders.length, icon: CheckCircle, color: "text-emerald-600 bg-emerald-50", sub: null },
   ];
 
   return (
@@ -89,6 +91,7 @@ export default function AdminDashboard() {
                   </div>
                   <p className="text-2xl font-bold">{stat.value}</p>
                   <p className="text-sm text-muted-foreground">{stat.label}</p>
+                  {stat.sub && <p className="text-xs text-muted-foreground mt-1 leading-tight">{stat.sub}</p>}
                 </div>
               ))}
             </div>
@@ -845,7 +848,10 @@ function LocationManager() {
               </div>
               <div className="bg-white rounded-lg border p-3 text-center">
                 <p className="text-xl font-bold">₦{(stateSummary.totalRevenue || 0).toLocaleString()}</p>
-                <p className="text-xs text-muted-foreground">Revenue</p>
+                <p className="text-xs text-muted-foreground">Total Revenue</p>
+                {(stateSummary.deliveryRevenue > 0) && (
+                  <p className="text-xs text-orange-600">₦{stateSummary.deliveryRevenue.toLocaleString()} delivery</p>
+                )}
               </div>
             </div>
           )}
@@ -925,24 +931,50 @@ function LocationManager() {
           </Button>
 
           {lgaSummary && (
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              <div className="bg-white rounded-lg border p-3 text-center">
-                <p className="text-xl font-bold">{lgaSummary.estateCount}</p>
-                <p className="text-xs text-muted-foreground">Estates</p>
+            <>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div className="bg-white rounded-lg border p-3 text-center">
+                  <p className="text-xl font-bold">{lgaSummary.estateCount}</p>
+                  <p className="text-xs text-muted-foreground">Estates</p>
+                </div>
+                <div className="bg-white rounded-lg border p-3 text-center">
+                  <p className="text-xl font-bold">{lgaSummary.vendors}</p>
+                  <p className="text-xs text-muted-foreground">Vendors</p>
+                </div>
+                <div className="bg-white rounded-lg border p-3 text-center">
+                  <p className="text-xl font-bold">{lgaSummary.customers}</p>
+                  <p className="text-xs text-muted-foreground">Customers</p>
+                </div>
+                <div className="bg-white rounded-lg border p-3 text-center">
+                  <p className="text-xl font-bold">₦{(lgaSummary.totalRevenue || 0).toLocaleString()}</p>
+                  <p className="text-xs text-muted-foreground">Total Revenue</p>
+                  {(lgaSummary.deliveryRevenue > 0) && (
+                    <p className="text-xs text-orange-600">₦{lgaSummary.deliveryRevenue.toLocaleString()} delivery</p>
+                  )}
+                </div>
               </div>
-              <div className="bg-white rounded-lg border p-3 text-center">
-                <p className="text-xl font-bold">{lgaSummary.vendors}</p>
-                <p className="text-xs text-muted-foreground">Vendors</p>
-              </div>
-              <div className="bg-white rounded-lg border p-3 text-center">
-                <p className="text-xl font-bold">{lgaSummary.customers}</p>
-                <p className="text-xs text-muted-foreground">Customers</p>
-              </div>
-              <div className="bg-white rounded-lg border p-3 text-center">
-                <p className="text-xl font-bold">₦{(lgaSummary.totalRevenue || 0).toLocaleString()}</p>
-                <p className="text-xs text-muted-foreground">Revenue</p>
-              </div>
-            </div>
+              {lgaSummary.estatesBreakdown && lgaSummary.estatesBreakdown.length > 0 && (
+                <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
+                  <p className="text-sm font-semibold text-orange-800 mb-3">Revenue by Estate</p>
+                  <div className="space-y-2">
+                    {lgaSummary.estatesBreakdown.map((est: any) => (
+                      <div key={est.id} className="flex items-center justify-between text-sm bg-white rounded-md px-3 py-2 border">
+                        <div>
+                          <span className="font-medium">{est.name}</span>
+                          <span className="text-xs text-muted-foreground ml-2">({est.orderCount} order{est.orderCount !== 1 ? "s" : ""})</span>
+                        </div>
+                        <div className="text-right">
+                          <p className="font-bold text-[#2d7a2d]">₦{est.totalRevenue.toLocaleString()}</p>
+                          {est.deliveryRevenue > 0 && (
+                            <p className="text-xs text-orange-600">₦{est.deliveryRevenue.toLocaleString()} delivery</p>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
           )}
 
           <div className="bg-white rounded-xl border border-border/50 p-6">
@@ -1009,6 +1041,14 @@ function FinancePanel() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
+  const { data: allOrdersData } = useQuery({
+    queryKey: ["/api/orders"],
+    queryFn: async () => {
+      const res = await apiRequest("GET", "/api/orders");
+      return res.json();
+    },
+  });
+
   const { data: payments } = useQuery({
     queryKey: ["/api/vendor-payments"],
     queryFn: async () => {
@@ -1054,8 +1094,44 @@ function FinancePanel() {
   const paymentsList = (payments || []) as any[];
   const totalSettled = paymentsList.reduce((sum: number, p: any) => sum + p.amount, 0);
 
+  const allOrdersList = (Array.isArray(allOrdersData) ? allOrdersData : []) as any[];
+  const paidFinanceOrders = allOrdersList.filter((o: any) => ['paid','ready_for_delivery','delivered'].includes(o.status));
+  const financeDeliveryRevenue = paidFinanceOrders.reduce((sum: number, o: any) => sum + (o.deliveryFee || 400), 0);
+  const financeTotalRevenue = paidFinanceOrders.reduce((sum: number, o: any) => sum + o.totalAmount, 0);
+  const financeProductRevenue = financeTotalRevenue - financeDeliveryRevenue;
+  const platformMargin = financeTotalRevenue - totalSettled;
+
   return (
     <div className="space-y-6">
+
+      <div className="bg-white rounded-xl border border-border/50 p-6">
+        <h2 className="font-semibold text-lg mb-4 flex items-center gap-2">
+          <DollarSign className="w-5 h-5" /> Revenue Overview
+        </h2>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="bg-green-50 rounded-lg p-4 text-center">
+            <p className="text-xl font-bold text-green-700">₦{financeTotalRevenue.toLocaleString()}</p>
+            <p className="text-xs text-green-600 mt-1">Total Revenue</p>
+            <p className="text-xs text-muted-foreground">products + delivery</p>
+          </div>
+          <div className="bg-blue-50 rounded-lg p-4 text-center">
+            <p className="text-xl font-bold text-blue-700">₦{financeProductRevenue.toLocaleString()}</p>
+            <p className="text-xs text-blue-600 mt-1">Product Revenue</p>
+            <p className="text-xs text-muted-foreground">goes to vendors</p>
+          </div>
+          <div className="bg-orange-50 rounded-lg p-4 text-center">
+            <p className="text-xl font-bold text-orange-700">₦{financeDeliveryRevenue.toLocaleString()}</p>
+            <p className="text-xs text-orange-600 mt-1">Delivery Revenue</p>
+            <p className="text-xs text-muted-foreground">₦400 × {paidFinanceOrders.length} orders</p>
+          </div>
+          <div className="bg-purple-50 rounded-lg p-4 text-center">
+            <p className="text-xl font-bold text-purple-700">₦{platformMargin.toLocaleString()}</p>
+            <p className="text-xs text-purple-600 mt-1">Platform Balance</p>
+            <p className="text-xs text-muted-foreground">revenue − settled</p>
+          </div>
+        </div>
+      </div>
+
       <div className="bg-white rounded-xl border border-border/50 p-6">
         <h2 className="font-semibold text-lg mb-4 flex items-center gap-2">
           <Shield className="w-5 h-5" /> System Controls
