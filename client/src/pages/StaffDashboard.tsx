@@ -56,6 +56,14 @@ export default function StaffDashboard() {
   const [showReceipts, setShowReceipts] = useState(false);
   const [currentVendorIndex, setCurrentVendorIndex] = useState(0);
   const [paidVendors, setPaidVendors] = useState<any[]>([]);
+
+  const [vendorSortBy, setVendorSortBy] = useState<"name" | "amount">("name");
+  const [vendorPayTarget, setVendorPayTarget] = useState<{
+    vendorId: number; vendorName: string; orderIds: number[];
+    preview: any; orderItems: Record<number, { orderCode: string; items: EnrichedItem[] }>;
+  } | null>(null);
+  const [payingVendor, setPayingVendor] = useState(false);
+  const [vendorPayResult, setVendorPayResult] = useState<any>(null);
   const [statsFrom, setStatsFrom] = useState<Date>(new Date());
   const [statsPeriod, setStatsPeriod] = useState<"week" | "twoWeek" | "month">("week");
 
@@ -231,6 +239,48 @@ export default function StaffDashboard() {
     setPaying(false);
   };
 
+  const handleSelectVendorToPay = async (vendorId: number) => {
+    const group = vendorGroups[vendorId];
+    if (!group) return;
+    setLoadingPreview(true);
+    try {
+      const res = await apiRequest("POST", "/api/vendor-payout/preview", { orderIds: group.orders.map(o => o.id) });
+      const data = await res.json();
+      const vendorPreview = (data.breakdown || []).find((b: any) => b.vendorId === vendorId) || data.breakdown?.[0] || {};
+      setVendorPayTarget({
+        vendorId,
+        vendorName: group.vendorName,
+        orderIds: group.orders.map(o => o.id),
+        preview: vendorPreview,
+        orderItems: group.orderItems,
+      });
+      setVendorPayResult(null);
+    } catch {
+      toast({ title: "Error", description: "Could not load vendor details", variant: "destructive" });
+    }
+    setLoadingPreview(false);
+  };
+
+  const handleConfirmVendorPay = async () => {
+    if (!vendorPayTarget) return;
+    setPayingVendor(true);
+    try {
+      const res = await apiRequest("POST", "/api/vendor-payout", {
+        orderIds: vendorPayTarget.orderIds,
+        vendorId: vendorPayTarget.vendorId,
+      });
+      const data = await res.json();
+      const result = data.payments?.[0] || { vendorName: vendorPayTarget.vendorName, amount: vendorPayTarget.preview?.amount, transferReference: "—" };
+      setVendorPayResult(result);
+      toast({ title: `Paid ${vendorPayTarget.vendorName}`, description: `₦${(result.amount || 0).toLocaleString()} settled.` });
+      queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/orders/items-bulk"] });
+    } catch {
+      toast({ title: "Payment failed", description: `Could not pay ${vendorPayTarget.vendorName}. Try again.`, variant: "destructive" });
+    }
+    setPayingVendor(false);
+  };
+
   const maskAccount = (acc: string) => acc && acc.length > 4 ? "****" + acc.slice(-4) : acc || "N/A";
 
   const batches: Record<string, Order[]> = {};
@@ -240,16 +290,22 @@ export default function StaffDashboard() {
     batches[label].push(o);
   }
 
-  const vendorGroups: Record<string, { vendorName: string; orders: Order[]; items: EnrichedItem[]; totalPayout: number }> = {};
+  const vendorGroups: Record<number, {
+    vendorId: number; vendorName: string; orders: Order[]; items: EnrichedItem[];
+    totalPayout: number; orderItems: Record<number, { orderCode: string; items: EnrichedItem[] }>;
+  }> = {};
   for (const o of acceptedOrders) {
     const oItems = itemsByOrder.get(o.id) || [];
     for (const item of oItems) {
       if (item.vendorPaid) continue;
-      const key = item.vendorName || "Unknown";
-      if (!vendorGroups[key]) vendorGroups[key] = { vendorName: key, orders: [], items: [], totalPayout: 0 };
-      if (!vendorGroups[key].orders.find(x => x.id === o.id)) vendorGroups[key].orders.push(o);
-      vendorGroups[key].items.push(item);
-      vendorGroups[key].totalPayout += item.vendorCostSnapshot * item.quantity;
+      const vId = (item.product as any)?.vendorId as number;
+      if (!vId) continue;
+      if (!vendorGroups[vId]) vendorGroups[vId] = { vendorId: vId, vendorName: item.vendorName || "Unknown", orders: [], items: [], totalPayout: 0, orderItems: {} };
+      if (!vendorGroups[vId].orders.find(x => x.id === o.id)) vendorGroups[vId].orders.push(o);
+      vendorGroups[vId].items.push(item);
+      vendorGroups[vId].totalPayout += item.vendorCostSnapshot * item.quantity;
+      if (!vendorGroups[vId].orderItems[o.id]) vendorGroups[vId].orderItems[o.id] = { orderCode: o.orderCode, items: [] };
+      vendorGroups[vId].orderItems[o.id].items.push(item);
     }
   }
 
@@ -292,7 +348,7 @@ export default function StaffDashboard() {
 
   const tabs: { id: TabId; label: string; icon: any; count?: number }[] = [
     { id: "batch", label: "Batch Board", icon: Clock, count: paidOrders.length + acceptedOrders.length },
-    { id: "vendor", label: "Vendor Pickup", icon: CreditCard, count: Object.keys(vendorGroups).length },
+    { id: "vendor", label: "Vendor Pay", icon: CreditCard, count: Object.keys(vendorGroups).length },
     { id: "delivery", label: "Delivery", icon: Truck, count: readyOrders.length },
     { id: "whatsapp", label: "WhatsApp", icon: MessageCircle },
     { id: "history", label: "History", icon: History },
@@ -442,49 +498,167 @@ export default function StaffDashboard() {
 
         {tab === "vendor" && !isLoading && (
           <div className="space-y-4">
-            {Object.keys(vendorGroups).length === 0 ? (
-              <div className="text-center py-16">
-                <CreditCard className="w-12 h-12 mx-auto mb-3 text-muted-foreground/30" />
-                <p className="text-muted-foreground">No unpaid vendor items</p>
-              </div>
-            ) : (
-              Object.entries(vendorGroups).map(([vendorName, group]) => (
-                <div key={vendorName} className="bg-white rounded-xl border border-border/50 p-4" data-testid={`vendor-group-${vendorName}`}>
-                  <div className="flex items-center justify-between mb-3">
-                    <div>
-                      <p className="font-semibold">{vendorName}</p>
-                      <p className="text-xs text-muted-foreground">{group.orders.length} orders</p>
+
+            {!vendorPayTarget && (
+              <>
+                {Object.keys(vendorGroups).length === 0 ? (
+                  <div className="text-center py-16">
+                    <CreditCard className="w-12 h-12 mx-auto mb-3 text-muted-foreground/30" />
+                    <p className="text-muted-foreground">No unpaid vendor items</p>
+                  </div>
+                ) : (
+                  <>
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm text-muted-foreground font-medium">
+                        {Object.keys(vendorGroups).length} vendor{Object.keys(vendorGroups).length !== 1 ? "s" : ""} to pay — choose who to pay first
+                      </p>
+                      <div className="flex gap-1">
+                        <Button size="sm" variant={vendorSortBy === "name" ? "default" : "outline"} onClick={() => setVendorSortBy("name")} className="h-7 text-xs px-2">
+                          A–Z
+                        </Button>
+                        <Button size="sm" variant={vendorSortBy === "amount" ? "default" : "outline"} onClick={() => setVendorSortBy("amount")} className="h-7 text-xs px-2">
+                          ₦ Highest
+                        </Button>
+                      </div>
                     </div>
-                    <span className="font-bold text-primary">₦{group.totalPayout.toLocaleString()}</span>
+
+                    {Object.values(vendorGroups)
+                      .sort((a, b) => vendorSortBy === "name"
+                        ? a.vendorName.localeCompare(b.vendorName)
+                        : b.totalPayout - a.totalPayout)
+                      .map(group => (
+                        <div key={group.vendorId} className="bg-white rounded-xl border border-border/50 p-4" data-testid={`vendor-group-${group.vendorId}`}>
+                          <div className="flex items-center justify-between mb-3">
+                            <div>
+                              <p className="font-semibold text-base">{group.vendorName}</p>
+                              <p className="text-xs text-muted-foreground">
+                                {group.orders.length} customer order{group.orders.length !== 1 ? "s" : ""} · {group.items.length} item line{group.items.length !== 1 ? "s" : ""}
+                              </p>
+                            </div>
+                            <span className="font-bold text-primary text-lg">₦{group.totalPayout.toLocaleString()}</span>
+                          </div>
+
+                          <div className="space-y-3 mb-3">
+                            {Object.entries(group.orderItems).map(([orderId, od]) => (
+                              <div key={orderId} className="bg-muted/40 rounded-lg p-2.5">
+                                <p className="text-xs font-semibold text-muted-foreground mb-1.5">{od.orderCode}</p>
+                                <div className="space-y-1">
+                                  {od.items.map((item, idx) => (
+                                    <div key={idx} className="flex justify-between text-sm">
+                                      <span className="text-foreground">{item.product?.name} <span className="text-muted-foreground">×{item.quantity}</span></span>
+                                      <span className="font-medium">₦{(item.vendorCostSnapshot * item.quantity).toLocaleString()}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+
+                          <Button
+                            size="sm"
+                            className="w-full"
+                            onClick={() => handleSelectVendorToPay(group.vendorId)}
+                            disabled={loadingPreview}
+                            data-testid={`button-pay-vendor-${group.vendorId}`}
+                          >
+                            {loadingPreview ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : <CreditCard className="w-3 h-3 mr-1" />}
+                            Pay {group.vendorName}
+                          </Button>
+                        </div>
+                      ))}
+                  </>
+                )}
+              </>
+            )}
+
+            {vendorPayTarget && !vendorPayResult && (
+              <div className="bg-white rounded-2xl border border-border/50 p-6 space-y-4">
+                <div className="flex items-center gap-3">
+                  <Button variant="ghost" size="sm" onClick={() => setVendorPayTarget(null)} className="p-1 h-auto">
+                    ← Back
+                  </Button>
+                  <h2 className="font-bold text-lg">Confirm Payment</h2>
+                </div>
+
+                <div className="border-2 border-primary/20 rounded-xl p-4 space-y-3 bg-primary/5">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <p className="font-bold text-base">{vendorPayTarget.vendorName}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {vendorPayTarget.preview?.accountNameVerified || vendorPayTarget.preview?.bankName || "—"} · {maskAccount(vendorPayTarget.preview?.accountNumber)}
+                      </p>
+                      {vendorPayTarget.preview?.recipientCode && (
+                        <Badge variant="outline" className="text-xs mt-1">Verified ✓</Badge>
+                      )}
+                    </div>
+                    <span className="font-bold text-primary text-xl">₦{(vendorPayTarget.preview?.amount || 0).toLocaleString()}</span>
                   </div>
 
-                  <div className="text-sm space-y-1 mb-3">
-                    {group.items.map((item, idx) => (
-                      <div key={idx} className="flex justify-between text-muted-foreground">
-                        <span>{item.product?.name} x{item.quantity}</span>
-                        <span>₦{(item.vendorCostSnapshot * item.quantity).toLocaleString()}</span>
+                  <div className="border-t border-primary/10 pt-3 space-y-3">
+                    <p className="text-xs font-semibold text-foreground uppercase tracking-wide">Items by Customer Order</p>
+                    {Object.entries(vendorPayTarget.orderItems).map(([orderId, od]) => (
+                      <div key={orderId} className="bg-white rounded-lg p-2.5 border border-primary/10">
+                        <p className="text-xs font-semibold text-primary mb-1.5">{od.orderCode}</p>
+                        <div className="space-y-1">
+                          {od.items.map((item, idx) => (
+                            <div key={idx} className="flex justify-between text-xs text-muted-foreground">
+                              <span>{item.product?.name} × {item.quantity}</span>
+                              <span className="font-medium text-foreground">₦{(item.vendorCostSnapshot * item.quantity).toLocaleString()}</span>
+                            </div>
+                          ))}
+                        </div>
                       </div>
                     ))}
                   </div>
+                </div>
 
-                  <div className="text-xs text-muted-foreground mb-2">
-                    Orders: {group.orders.map(o => o.orderCode).join(", ")}
-                  </div>
+                <p className="text-xs text-muted-foreground bg-yellow-50 rounded-lg p-3">
+                  Payment is row-locked per vendor to prevent duplicates. Only items for {vendorPayTarget.vendorName} will be settled.
+                </p>
 
-                  <Button
-                    size="sm"
-                    onClick={() => {
-                      const ids = group.orders.map(o => o.id);
-                      setSelectedIds(new Set(ids));
-                      handleShowPaySummary();
-                    }}
-                    data-testid={`button-pay-${vendorName}`}
-                  >
-                    <CreditCard className="w-3 h-3 mr-1" /> Pay Vendor
+                <div className="flex gap-3">
+                  <Button variant="outline" className="flex-1" onClick={() => setVendorPayTarget(null)}>
+                    Cancel
+                  </Button>
+                  <Button className="flex-1" onClick={handleConfirmVendorPay} disabled={payingVendor} data-testid={`button-confirm-vendor-pay-${vendorPayTarget.vendorId}`}>
+                    {payingVendor ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <CreditCard className="w-4 h-4 mr-2" />}
+                    Confirm — Pay {vendorPayTarget.vendorName}
                   </Button>
                 </div>
-              ))
+              </div>
             )}
+
+            {vendorPayTarget && vendorPayResult && (
+              <div className="bg-white rounded-2xl border border-border/50 p-6 space-y-4 text-center">
+                <div className="w-16 h-16 rounded-full bg-green-100 flex items-center justify-center mx-auto">
+                  <CheckCircle className="w-8 h-8 text-green-600" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold">Payment Sent!</h2>
+                  <p className="text-sm text-muted-foreground mt-1">{vendorPayResult.vendorName} has been settled</p>
+                </div>
+                <div className="bg-secondary/30 rounded-xl p-4 text-left space-y-1">
+                  <div className="flex justify-between">
+                    <span className="text-sm text-muted-foreground">Amount</span>
+                    <span className="font-bold text-primary">₦{(vendorPayResult.amount || 0).toLocaleString()}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-sm text-muted-foreground">Reference</span>
+                    <span className="text-xs font-medium">{vendorPayResult.transferReference}</span>
+                  </div>
+                </div>
+                <div className="flex gap-3">
+                  <Button
+                    className="flex-1"
+                    onClick={() => { setVendorPayTarget(null); setVendorPayResult(null); }}
+                    data-testid="button-pay-another-vendor"
+                  >
+                    Pay Another Vendor
+                  </Button>
+                </div>
+              </div>
+            )}
+
           </div>
         )}
 
