@@ -90,7 +90,7 @@ function HeroSection() {
       </div>
       <div className="relative max-w-4xl mx-auto px-4 sm:px-6 text-center">
         <div className="flex justify-center mb-6">
-          <img src="/logo-rs.jpg" alt="RelaxShopping Logo" className="h-24 w-24 sm:h-32 sm:w-32 rounded-full object-cover shadow-lg ring-4 ring-white" />
+          <img src="/logo-rs.jpg" alt="RelaxShopping Logo" className="h-36 w-36 sm:h-48 sm:w-48 rounded-full object-cover shadow-xl ring-4 ring-white" />
         </div>
         <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold text-gray-900 leading-tight mb-6">
           Shop Smarter<br />

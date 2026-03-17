@@ -40,8 +40,8 @@ export default function Auth() {
     <div className="min-h-screen bg-gradient-to-br from-primary/10 via-background to-background flex items-center justify-center px-4 py-8">
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
-          <div className="w-14 h-14 rounded-full bg-primary flex items-center justify-center mx-auto mb-4">
-            <span className="text-white font-bold text-2xl">R</span>
+          <div className="flex justify-center mb-4">
+            <img src="/logo-rs.jpg" alt="RelaxShopping" className="h-24 w-24 rounded-full object-cover shadow-lg ring-4 ring-white" />
           </div>
           <h1 className="text-3xl font-bold text-foreground" data-testid="text-auth-title">RelaxShopping</h1>
           <p className="text-muted-foreground mt-1">Log in to your account</p>
