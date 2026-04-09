@@ -1,33 +1,41 @@
-import { storage } from "../../server/storage";
+import { createClient } from '@supabase/supabase-js'
+
+const supabase = createClient(
+  process.env.VITE_SUPABASE_URL!,
+  process.env.VITE_SUPABASE_ANON_KEY!
+)
 
 export default async function handler(req: any, res: any) {
   try {
-    const authHeader = req.headers.authorization;
+    const authHeader = req.headers.authorization
 
     if (!authHeader?.startsWith("Bearer ")) {
-      return res.status(401).json({ message: "No token" });
+      return res.status(401).json({ message: "No token" })
     }
 
-    const token = authHeader.split(" ")[1];
+    const token = authHeader.split(" ")[1]
 
-    // Decode token
-    const decoded: any = JSON.parse(
-      Buffer.from(token.split(".")[1], "base64").toString()
-    );
+    // Get user from Supabase
+    const { data: userData, error: userError } = await supabase.auth.getUser(token)
 
-    if (!decoded?.sub) {
-      return res.status(401).json({ message: "Invalid token" });
+    if (userError || !userData.user) {
+      return res.status(401).json({ message: "Invalid user" })
     }
 
-    // Get user from DB
-    const user = await storage.getUserBySupabaseId(decoded.sub);
+    // Fetch profile from your DB
+    const { data: profile, error: profileError } = await supabase
+      .from('users') // or profiles if that's your table
+      .select('*')
+      .eq('supabase_id', userData.user.id)
+      .single()
 
-    if (!user) {
-      return res.status(404).json({ message: "User not found" });
+    if (profileError || !profile) {
+      return res.status(404).json({ message: "User not found" })
     }
 
-    return res.status(200).json(user);
+    return res.status(200).json(profile)
+
   } catch (err) {
-    return res.status(500).json({ message: "Server error" });
+    return res.status(500).json({ message: "Server error" })
   }
 }
