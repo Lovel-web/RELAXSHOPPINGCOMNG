@@ -26,19 +26,25 @@ export default async function handler(req: any, res: any) {
     }
 
     // Fetch profile from your DB
-    const { data: profile, error: profileError } = await supabase
-      .from('users') // or profiles if that's your table
-      .select('*')
-      .eq('supabase_id', userData.user.id)
-      .single()
+const { data: user, error } = await supabase
+  .from('users')
+  .select('*')
+  .eq('supabase_id', userData.user.id)
+  .maybeSingle();
 
-    if (profileError || !profile) {
-      return res.status(404).json({ message: "User not found" })
-    }
-
-    return res.status(200).json(profile)
-
-  } catch (err) {
-    return res.status(500).json({ message: "Server error" })
-  }
+// ✅ Proper error handling
+if (error) {
+  console.error("DB ERROR:", error);
+  return res.status(500).json({ message: "Database error" });
 }
+
+if (!user) {
+  console.log("NO USER FOUND IN DB");
+  return res.status(404).json({ message: "User not found" });
+}
+
+// ✅ Return only what frontend needs
+return res.status(200).json({
+  email: user.email,
+  role: user.role
+});
