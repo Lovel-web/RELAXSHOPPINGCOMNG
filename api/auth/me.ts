@@ -18,6 +18,9 @@ export default async function handler(req: any, res: any) {
     // Get user from Supabase
     const { data: userData, error: userError } = await supabase.auth.getUser(token)
 
+    console.log("AUTH USER ID:", userData?.user?.id);
+    console.log("AUTH EMAIL:", userData?.user?.email);
+
     if (userError || !userData.user) {
       return res.status(401).json({ message: "Invalid user" })
     }
