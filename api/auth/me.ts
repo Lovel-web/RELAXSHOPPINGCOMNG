@@ -1,10 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
 
-const supabase = createClient(
-  process.env.VITE_SUPABASE_URL!,
-  process.env.VITE_SUPABASE_ANON_KEY!
-)
-
 export default async function handler(req: any, res: any) {
   try {
     const authHeader = req.headers.authorization
@@ -15,7 +10,21 @@ export default async function handler(req: any, res: any) {
 
     const token = authHeader.split(" ")[1]
 
-    const { data: userData, error: userError } = await supabase.auth.getUser(token)
+    // ✅ CREATE CLIENT WITH USER TOKEN (CRITICAL FIX)
+    const supabase = createClient(
+      process.env.VITE_SUPABASE_URL!,
+      process.env.VITE_SUPABASE_ANON_KEY!,
+      {
+        global: {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        },
+      }
+    )
+
+    // ✅ Get authenticated user
+    const { data: userData, error: userError } = await supabase.auth.getUser()
 
     console.log("AUTH USER ID:", userData?.user?.id);
     console.log("AUTH EMAIL:", userData?.user?.email);
@@ -24,6 +33,7 @@ export default async function handler(req: any, res: any) {
       return res.status(401).json({ message: "Invalid user" })
     }
 
+    // ✅ Fetch from DB (RLS now works)
     const { data: user, error } = await supabase
       .from('users')
       .select('*')
