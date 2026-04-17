@@ -25,6 +25,7 @@ export default async function handler(req: any, res: any) {
 
     // ✅ Get authenticated user
     const { data: userData, error: userError } = await supabase.auth.getUser()
+    console.log("CREATING STATE AS:", userData.user.email)
 
     console.log("AUTH USER ID:", userData?.user?.id);
     console.log("AUTH EMAIL:", userData?.user?.email);
