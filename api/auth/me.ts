@@ -34,6 +34,8 @@ export default async function handler(req: any, res: any) {
       return res.status(401).json({ message: "Invalid user" })
     }
 
+    console.log("CREATING STATE AS:", userData.user.email)
+
     // ✅ Fetch from DB (RLS now works)
     const { data: user, error } = await supabase
       .from('users')
