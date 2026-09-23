@@ -1,24 +1,23 @@
-import { pgTable, text, serial, integer, boolean, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, uuid, integer, boolean, timestamp, numeric } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
-import { z } from "zod";
 
 export const states = pgTable("states", {
-  id: serial("id").primaryKey(),
+  id: uuid("id").defaultRandom().primaryKey(),
   name: text("name").notNull(),
   isActive: boolean("is_active").default(true),
 });
 
 export const lgas = pgTable("lgas", {
-  id: serial("id").primaryKey(),
-  stateId: integer("state_id").notNull(),
+  id: uuid("id").defaultRandom().primaryKey(),
+  stateId: uuid("state_id"),
   name: text("name").notNull(),
   whatsappLink: text("whatsapp_link"),
   isActive: boolean("is_active").default(true),
 });
 
 export const estates = pgTable("estates", {
-  id: serial("id").primaryKey(),
-  lgaId: integer("lga_id").notNull(),
+  id: uuid("id").defaultRandom().primaryKey(),
+  lgaId: uuid("lga_id"),
   name: text("name").notNull(),
   abbreviation: text("abbreviation").notNull(),
   isActive: boolean("is_active").default(true),
@@ -31,8 +30,8 @@ export const users = pgTable("users", {
   name: text("name").notNull(),
   phone: text("phone").notNull(),
   role: text("role").notNull(),
-  stateId: integer("state_id"),
-  lgaId: integer("lga_id"),
+  stateId: text("state_id"),
+  lgaId: text("lga_id"),
   approved: boolean("approved").default(false),
   bankName: text("bank_name"),
   accountNumber: text("account_number"),
@@ -42,43 +41,44 @@ export const users = pgTable("users", {
 });
 
 export const products = pgTable("products", {
-  id: serial("id").primaryKey(),
-  vendorId: integer("vendor_id").notNull(),
-  name: text("name").notNull(),
-  price: integer("price").notNull(),
-  vendorCost: integer("vendor_cost").notNull().default(0),
-  stock: integer("stock").notNull().default(0),
+  id: uuid("id").defaultRandom().primaryKey(),
+  vendorId: uuid("vendor_id"),
+  name: text("name"),
+  price: numeric("price"),
+  stock: integer("stock"),
   imageUrl: text("image_url"),
-  lgaId: integer("lga_id").notNull(),
+  lgaId: text("lga_id"),
+  createdAt: timestamp("created_at").defaultNow(),
+  vendorCost: integer("vendor_cost").default(0),
   category: text("category"),
 });
 
 export const orders = pgTable("orders", {
-  id: serial("id").primaryKey(),
-  orderCode: text("order_code").notNull().unique(),
-  customerId: integer("customer_id").notNull(),
-  estateId: integer("estate_id").notNull(),
-  lgaId: integer("lga_id").notNull(),
-  stateId: integer("state_id").notNull(),
-  staffId: integer("staff_id"),
-  totalAmount: integer("total_amount").notNull(),
-  deliveryFee: integer("delivery_fee").notNull().default(400),
-  status: text("status").notNull().default('pending_payment'),
-  vendorPaid: boolean("vendor_paid").default(false),
-  paymentReference: text("payment_reference"),
+  id: uuid("id").defaultRandom().primaryKey(),
+  orderCode: text("order_code").unique(),
+  customerId: uuid("customer_id"),
+  estateId: text("estate_id"),
+  lgaId: text("lga_id"),
+  stateId: text("state_id"),
+  staffId: uuid("staff_id"),
+  totalAmount: numeric("total_amount"),
+  deliveryFee: numeric("delivery_fee").default("400"),
   batchTime: text("batch_time"),
-  claimedByStaffId: integer("claimed_by_staff_id"),
-  claimedAt: timestamp("claimed_at"),
+  paymentReference: text("payment_reference"),
+  paymentStatus: text("payment_status"),
+  vendorPaid: boolean("vendor_paid").default(false),
+  status: text("status").default("paid"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
 export const orderItems = pgTable("order_items", {
-  id: serial("id").primaryKey(),
-  orderId: integer("order_id").notNull(),
-  productId: integer("product_id").notNull(),
-  quantity: integer("quantity").notNull(),
-  priceSnapshot: integer("price_snapshot").notNull(),
-  vendorCostSnapshot: integer("vendor_cost_snapshot").notNull().default(0),
+  id: uuid("id").defaultRandom().primaryKey(),
+  orderId: uuid("order_id"),
+  productId: uuid("product_id"),
+  vendorId: uuid("vendor_id"),
+  quantity: integer("quantity"),
+  priceSnapshot: numeric("price_snapshot"),
+  vendorCostSnapshot: integer("vendor_cost_snapshot").default(0),
   vendorPaid: boolean("vendor_paid").default(false),
 });
 
@@ -100,14 +100,14 @@ export const checkoutSessions = pgTable("checkout_sessions", {
   customerName: text("customer_name").notNull(),
   customerPhone: text("customer_phone").notNull(),
   customerEmail: text("customer_email"),
-  estateId: integer("estate_id").notNull(),
-  lgaId: integer("lga_id").notNull(),
-  stateId: integer("state_id").notNull(),
+  estateId: text("estate_id").notNull(),
+  lgaId: text("lga_id").notNull(),
+  stateId: text("state_id").notNull(),
   items: text("items").notNull(),
   totalAmount: integer("total_amount").notNull(),
   deliveryFee: integer("delivery_fee").notNull().default(400),
-  status: text("status").notNull().default('pending'),
-  orderId: integer("order_id"),
+  status: text("status").notNull().default("pending"),
+  orderId: uuid("order_id"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
