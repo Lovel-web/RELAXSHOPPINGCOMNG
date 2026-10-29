@@ -1185,35 +1185,38 @@ export async function registerRoutes(
     }
   });
 
-  app.post('/api/states', requireAuth, requireRole("admin"), async (req, res) => {
+  app.post('/api/states', requireAuth, requireRole("admin", "superadmin"), async (req, res) => {
     try {
       const { name } = req.body;
       if (!name) return res.status(400).json({ message: "Name required" });
       const state = await storage.createState(name);
       res.status(201).json(state);
     } catch (err) {
+      console.error("[location:create-state] Failed to create state:", err);
       res.status(500).json({ message: "Failed to create state" });
     }
   });
 
-  app.post('/api/lgas', requireAuth, requireRole("admin"), async (req, res) => {
+  app.post('/api/lgas', requireAuth, requireRole("admin", "superadmin"), async (req, res) => {
     try {
       const { stateId, name, whatsappLink } = req.body;
       if (!stateId || !name) return res.status(400).json({ message: "stateId and name required" });
       const lga = await storage.createLga({ stateId, name, whatsappLink });
       res.status(201).json(lga);
     } catch (err) {
+      console.error("[location:create-lga] Failed to create LGA:", err);
       res.status(500).json({ message: "Failed to create LGA" });
     }
   });
 
-  app.post('/api/estates', requireAuth, requireRole("admin"), async (req, res) => {
+  app.post('/api/estates', requireAuth, requireRole("admin", "superadmin"), async (req, res) => {
     try {
       const { lgaId, name, abbreviation } = req.body;
       if (!lgaId || !name || !abbreviation) return res.status(400).json({ message: "lgaId, name, and abbreviation required" });
       const estate = await storage.createEstate({ lgaId, name, abbreviation });
       res.status(201).json(estate);
     } catch (err) {
+      console.error("[location:create-estate] Failed to create estate:", err);
       res.status(500).json({ message: "Failed to create estate" });
     }
   });
