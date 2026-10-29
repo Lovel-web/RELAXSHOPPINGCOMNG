@@ -1,5 +1,4 @@
 import express from "express";
-import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { createServer } from "http";
 import { registerRoutes } from "../server/routes";
 
@@ -27,14 +26,10 @@ async function initialize() {
   return initPromise;
 }
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+export default async function handler(req: any, res: any) {
   try {
     await initialize();
-    // Vercel may pass the catch-all function path with or without the /api prefix.
-    if (req.url?.startsWith("/api/")) {
-      req.url = req.url.slice(4);
-    }
-    return app(req as any, res as any);
+    return app(req, res);
   } catch (err) {
     console.error("[vercel-api] Initialization failed:", err);
     return res.status(500).json({ message: "API initialization failed" });
